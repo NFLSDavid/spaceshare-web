@@ -27,6 +27,10 @@
 # IDE
 .idea/
 .claude/
+.vscode/
+
+# temp files
+tmpclaude-*
 
 # debug
 npm-debug.log*
