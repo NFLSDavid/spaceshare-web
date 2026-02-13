@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Amenity {
+  SURVEILLANCE
+  CLIMATE_CONTROLLED
+  WELL_LIT
+  ACCESSIBILITY
+  WEEKLY_CLEANING
+}
+
+enum ReservationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String?
+  firstName     String
+  lastName      String
+  phone         String?
+  photoUrl      String?
+  governmentId  String?
+  isVerified     Int       @default(0)
+  emailVerified  Boolean   @default(false)
+  isAdmin        Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  listings            Listing[]
+  hostReservations    Reservation[] @relation("ReservationHost")
+  clientReservations  Reservation[] @relation("ReservationClient")
+  chatMembers         ChatMember[]
+  shortlist           Shortlist?
+  preferences         Preferences?
+  accounts            Account[]
+  sessions            Session[]
+  verificationTokens  VerificationToken[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Listing {
+  id             String    @id @default(cuid())
+  hostId         String
+  title          String
+  description    String    @db.Text
+  price          Float
+  spaceAvailable Float
+  amenities      Amenity[]
+  photos         String[]
+  likes          Int       @default(0)
+  isActive       Boolean   @default(true)
+  latitude       Float
+  longitude      Float
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  host         User          @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  bookings     Booking[]
+  reservations Reservation[]
+  chats        Chat[]
+
+  @@map("listings")
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  listingId     String
+  startDate     DateTime
+  endDate       DateTime
+  reservedSpace Float
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("bookings")
+}
+
+model Reservation {
+  id               String            @id @default(cuid())
+  listingId        String
+  hostId           String
+  clientId         String
+  spaceRequested   Float
+  totalCost        Float
+  startDate        DateTime
+  endDate          DateTime
+  status           ReservationStatus @default(PENDING)
+  message          String?           @db.Text
+  items            Json?
+  rated            Boolean           @default(false)
+  paymentCompleted Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  host    User    @relation("ReservationHost", fields: [hostId], references: [id])
+  client  User    @relation("ReservationClient", fields: [clientId], references: [id])
+
+  @@map("reservations")
+}
+
+model Chat {
+  id        String   @id @default(cuid())
+  title     String
+  photoUrl  String?
+  listingId String?
+  createdAt DateTime @default(now())
+
+  listing  Listing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  members  ChatMember[]
+  messages Message[]
+
+  @@map("chats")
+}
+
+model ChatMember {
+  chatId String
+  userId String
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, userId])
+  @@map("chat_members")
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  chatId     String
+  senderId   String
+  senderName String
+  text       String?  @db.Text
+  imageUrl   String?
+  createdAt  DateTime @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Shortlist {
+  userId     String   @id
+  listingIds String[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("shortlists")
+}
+
+model Preferences {
+  userId    String  @id
+  email     String?
+  isActive  Boolean @default(false)
+  latitude  Float?
+  longitude Float?
+  radius    Int     @default(5)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("preferences")
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  type      String   // "EMAIL_VERIFY" or "PASSWORD_RESET"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verification_tokens")
+}
