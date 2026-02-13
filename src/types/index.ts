@@ -9,7 +9,7 @@ import type {
   Preferences,
   Amenity,
   ReservationStatus,
-} from "@prisma/client";
+} from "@/generated/prisma/client";
 
 export type {
   User,
@@ -33,7 +33,10 @@ export type ListingWithBookings = Listing & {
 };
 
 export type ReservationWithDetails = Reservation & {
-  listing: Pick<Listing, "id" | "title" | "photos" | "latitude" | "longitude" | "price">;
+  listing: Pick<
+    Listing,
+    "id" | "title" | "photos" | "latitude" | "longitude" | "price"
+  >;
   host: Pick<User, "id" | "firstName" | "lastName" | "photoUrl" | "email">;
   client: Pick<User, "id" | "firstName" | "lastName" | "photoUrl">;
 };
