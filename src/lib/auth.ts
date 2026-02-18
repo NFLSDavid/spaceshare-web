@@ -52,45 +52,34 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
-      if (account?.provider === "google" && profile?.email) {
-        try {
-          const existingUser = await prisma.user.findUnique({
-            where: { email: profile.email },
-          });
-
-          if (!existingUser) {
-            await prisma.user.create({
-              data: {
-                email: profile.email,
-                firstName: (profile as any).given_name || profile.name?.split(" ")[0] || "",
-                lastName: (profile as any).family_name || profile.name?.split(" ").slice(1).join(" ") || "",
-                photoUrl: (profile as any).picture || null,
-              },
-            });
-          }
-        } catch (error) {
-          console.error("Google signIn callback error:", error);
-          return false;
-        }
-      }
-      return true;
-    },
     async jwt({ token, user, account, profile }) {
       // On initial sign-in, populate token from DB
-      if (account) {
-        let dbUser;
-
-        if (account.provider === "google" && profile?.email) {
-          dbUser = await prisma.user.findUnique({
+      if (account?.provider === "google" && profile?.email) {
+        // upsert: create if not exists, find if exists — atomic, no race condition
+        try {
+          const dbUser = await prisma.user.upsert({
             where: { email: profile.email },
+            update: {},
+            create: {
+              email: profile.email,
+              firstName: (profile as any).given_name || profile.name?.split(" ")[0] || "",
+              lastName: (profile as any).family_name || profile.name?.split(" ").slice(1).join(" ") || "",
+              photoUrl: (profile as any).picture || null,
+            },
           });
-        } else if (user?.email) {
-          dbUser = await prisma.user.findUnique({
-            where: { email: user.email },
-          });
+          token.id = dbUser.id;
+          token.email = dbUser.email;
+          token.firstName = dbUser.firstName;
+          token.lastName = dbUser.lastName;
+          token.isAdmin = dbUser.isAdmin;
+          token.isVerified = dbUser.isVerified;
+        } catch (error) {
+          console.error("Google jwt callback error:", error);
         }
-
+      } else if (account?.provider === "credentials" && user?.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
         if (dbUser) {
           token.id = dbUser.id;
           token.email = dbUser.email;

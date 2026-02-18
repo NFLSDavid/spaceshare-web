@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useAuth } from "@/hooks/use-auth";
-import { useModeStore } from "@/stores/mode-store";
 import { cn } from "@/lib/cn";
 import {
   Search,
@@ -12,29 +11,21 @@ import {
   MessageSquare,
   User,
   LogOut,
-  ArrowLeftRight,
 } from "lucide-react";
+
+const navItems = [
+  { href: "/search", label: "Search", icon: Search },
+  { href: "/listings", label: "My Listings", icon: Home },
+  { href: "/reservations", label: "Reservations", icon: CalendarCheck },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/profile", label: "Profile", icon: User },
+];
 
 export function NavBar() {
   const { user } = useAuth();
-  const { isHostMode, toggleMode } = useModeStore();
   const pathname = usePathname();
 
   if (!user) return null;
-
-  const navItems = isHostMode
-    ? [
-        { href: "/listings", label: "My Listings", icon: Home },
-        { href: "/reservations", label: "Reservations", icon: CalendarCheck },
-        { href: "/messages", label: "Messages", icon: MessageSquare },
-        { href: "/profile", label: "Profile", icon: User },
-      ]
-    : [
-        { href: "/search", label: "Search", icon: Search },
-        { href: "/reservations", label: "Reservations", icon: CalendarCheck },
-        { href: "/messages", label: "Messages", icon: MessageSquare },
-        { href: "/profile", label: "Profile", icon: User },
-      ];
 
   return (
     <>
@@ -42,9 +33,6 @@ export function NavBar() {
       <aside className="hidden md:flex flex-col w-64 border-r border-gray-200 bg-white h-screen fixed left-0 top-0">
         <div className="px-6 py-5 border-b border-gray-100">
           <h1 className="text-xl font-bold text-blue-600">SpaceShare</h1>
-          <p className="text-xs text-gray-500 mt-1">
-            {isHostMode ? "Host Mode" : "Client Mode"}
-          </p>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -69,14 +57,7 @@ export function NavBar() {
           })}
         </nav>
 
-        <div className="px-3 py-4 border-t border-gray-100 space-y-2">
-          <button
-            onClick={toggleMode}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            <ArrowLeftRight className="h-5 w-5" />
-            Switch to {isHostMode ? "Client" : "Host"}
-          </button>
+        <div className="px-3 py-4 border-t border-gray-100">
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"

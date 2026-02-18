@@ -93,9 +93,10 @@ describe("DELETE /api/listings/[id]", () => {
   beforeEach(() => {
     vi.mocked(getServerSession).mockReset();
     prismaMock.listing.findUnique.mockReset();
-    prismaMock.listing.delete.mockReset();
+    prismaMock.listing.update.mockReset();
     prismaMock.reservation.findMany.mockReset();
-    prismaMock.chat.deleteMany.mockReset();
+    prismaMock.reservation.updateMany.mockReset();
+    prismaMock.booking.deleteMany.mockReset();
   });
 
   it("returns 401 when not authenticated", async () => {
@@ -115,27 +116,33 @@ describe("DELETE /api/listings/[id]", () => {
     expect(status).toBe(403);
   });
 
-  it("returns 409 when listing has active reservations", async () => {
+  it("returns 200 and soft-deletes listing", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.listing.findUnique.mockResolvedValue({ id: "l1", hostId: "host1" });
-    prismaMock.reservation.findMany.mockResolvedValue([{ id: "r1", status: "PENDING" }]);
+    prismaMock.listing.update.mockResolvedValue({});
+    prismaMock.reservation.updateMany.mockResolvedValue({});
+    prismaMock.reservation.findMany.mockResolvedValue([]);
+    prismaMock.booking.deleteMany.mockResolvedValue({});
     const req = createRequest("http://localhost:3000/api/listings/l1", { method: "DELETE" });
     const res = await DELETE(req, makeParams("l1"));
-    const { status } = await parseResponse(res);
-    expect(status).toBe(409);
+    const { status, body } = await parseResponse(res);
+    expect(status).toBe(200);
+    expect(body.message).toBe("Listing deactivated");
   });
 
-  it("returns 200 and deletes chats then listing on success", async () => {
+  it("soft-deletes listing with active reservations", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.listing.findUnique.mockResolvedValue({ id: "l1", hostId: "host1" });
-    prismaMock.reservation.findMany.mockResolvedValue([]);
-    prismaMock.chat.deleteMany.mockResolvedValue({});
-    prismaMock.listing.delete.mockResolvedValue({});
+    prismaMock.listing.update.mockResolvedValue({});
+    prismaMock.reservation.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.reservation.findMany.mockResolvedValue([
+      { listingId: "l1", startDate: new Date(), endDate: new Date(), spaceRequested: 5, status: "APPROVED" },
+    ]);
+    prismaMock.booking.deleteMany.mockResolvedValue({});
     const req = createRequest("http://localhost:3000/api/listings/l1", { method: "DELETE" });
     const res = await DELETE(req, makeParams("l1"));
-    const { status } = await parseResponse(res);
+    const { status, body } = await parseResponse(res);
     expect(status).toBe(200);
-    expect(prismaMock.chat.deleteMany).toHaveBeenCalledWith({ where: { listingId: "l1" } });
-    expect(prismaMock.listing.delete).toHaveBeenCalledWith({ where: { id: "l1" } });
+    expect(body.message).toBe("Listing deactivated");
   });
 });

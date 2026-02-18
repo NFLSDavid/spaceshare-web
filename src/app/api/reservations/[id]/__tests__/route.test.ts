@@ -5,16 +5,17 @@ import { createRequest, parseResponse } from "@/test/helpers";
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
-vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/email-templates", () => ({
+vi.mock("@/lib/email/sender", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/email/templates", () => ({
   reservationStatusEmail: vi.fn().mockReturnValue({ subject: "Status", html: "<p>s</p>" }),
+  reservationCancelledByClientEmail: vi.fn().mockReturnValue({ subject: "Cancelled", html: "<p>c</p>" }),
 }));
 vi.mock("date-fns", () => ({
   format: vi.fn(() => "Jan 1, 2025"),
 }));
 
 import { getServerSession } from "next-auth";
-import { sendEmail } from "@/lib/email";
+import { sendEmail } from "@/lib/email/sender";
 const { PATCH } = await import("../../[id]/route");
 
 const makeParams = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -28,7 +29,7 @@ const baseReservation = {
   spaceRequested: 5,
   startDate: new Date("2025-01-01"),
   endDate: new Date("2025-01-05"),
-  listing: { id: "l1", title: "Test" },
+  listing: { id: "l1", title: "Test", spaceAvailable: 20, bookings: [] },
 };
 
 describe("PATCH /api/reservations/[id]", () => {
@@ -38,6 +39,7 @@ describe("PATCH /api/reservations/[id]", () => {
     prismaMock.reservation.findUnique.mockReset();
     prismaMock.reservation.update.mockReset();
     prismaMock.booking.create.mockReset();
+    prismaMock.booking.findMany.mockReset();
     prismaMock.booking.deleteMany.mockReset();
     prismaMock.user.findUnique.mockReset();
   });
@@ -77,9 +79,10 @@ describe("PATCH /api/reservations/[id]", () => {
     expect(status).toBe(403);
   });
 
-  it("host can APPROVE (creates booking)", async () => {
+  it("host can APPROVE (creates booking with availability check)", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
     prismaMock.reservation.findUnique.mockResolvedValue(baseReservation);
+    prismaMock.booking.findMany.mockResolvedValue([]);
     prismaMock.booking.create.mockResolvedValue({});
     prismaMock.reservation.update.mockResolvedValue({
       ...baseReservation,
@@ -126,9 +129,13 @@ describe("PATCH /api/reservations/[id]", () => {
     expect(status).toBe(200);
   });
 
-  it("host can COMPLETE", async () => {
+  it("host can COMPLETE when end date has passed", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
-    prismaMock.reservation.findUnique.mockResolvedValue({ ...baseReservation, status: "APPROVED" });
+    prismaMock.reservation.findUnique.mockResolvedValue({
+      ...baseReservation,
+      status: "APPROVED",
+      endDate: new Date("2020-01-05"),
+    });
     prismaMock.reservation.update.mockResolvedValue({
       ...baseReservation,
       status: "COMPLETED",
@@ -156,6 +163,7 @@ describe("PATCH /api/reservations/[id]", () => {
       host: { id: "host1" },
       client: { id: "client1" },
     });
+    prismaMock.user.findUnique.mockResolvedValue({ email: "h@test.com", firstName: "Host" });
     const req = createRequest("http://localhost:3000/api/reservations/r1", {
       method: "PATCH",
       body: { status: "CANCELLED" },
@@ -169,6 +177,7 @@ describe("PATCH /api/reservations/[id]", () => {
   it("sends email on APPROVED", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
     prismaMock.reservation.findUnique.mockResolvedValue(baseReservation);
+    prismaMock.booking.findMany.mockResolvedValue([]);
     prismaMock.booking.create.mockResolvedValue({});
     prismaMock.reservation.update.mockResolvedValue({
       ...baseReservation,
@@ -205,7 +214,7 @@ describe("PATCH /api/reservations/[id]", () => {
     expect(sendEmail).toHaveBeenCalled();
   });
 
-  it("does not send email on CANCELLED", async () => {
+  it("sends email to host on CANCELLED", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "client1" } } as any);
     prismaMock.reservation.findUnique.mockResolvedValue({ ...baseReservation, status: "APPROVED" });
     prismaMock.booking.deleteMany.mockResolvedValue({});
@@ -216,17 +225,24 @@ describe("PATCH /api/reservations/[id]", () => {
       host: { id: "host1" },
       client: { id: "client1" },
     });
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ email: "h@test.com", firstName: "Host" })
+      .mockResolvedValueOnce({ firstName: "Client", lastName: "Test" });
     const req = createRequest("http://localhost:3000/api/reservations/r1", {
       method: "PATCH",
       body: { status: "CANCELLED" },
     });
     await PATCH(req, makeParams("r1"));
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalled();
   });
 
   it("does not send email on COMPLETED", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
-    prismaMock.reservation.findUnique.mockResolvedValue({ ...baseReservation, status: "APPROVED" });
+    prismaMock.reservation.findUnique.mockResolvedValue({
+      ...baseReservation,
+      status: "APPROVED",
+      endDate: new Date("2020-01-05"),
+    });
     prismaMock.reservation.update.mockResolvedValue({
       ...baseReservation,
       status: "COMPLETED",
@@ -240,5 +256,71 @@ describe("PATCH /api/reservations/[id]", () => {
     });
     await PATCH(req, makeParams("r1"));
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for invalid state transition (DECLINED to APPROVED)", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
+    prismaMock.reservation.findUnique.mockResolvedValue({
+      ...baseReservation,
+      status: "DECLINED",
+    });
+    const req = createRequest("http://localhost:3000/api/reservations/r1", {
+      method: "PATCH",
+      body: { status: "APPROVED" },
+    });
+    const res = await PATCH(req, makeParams("r1"));
+    const { status } = await parseResponse(res);
+    expect(status).toBe(400);
+  });
+
+  it("returns 400 for invalid state transition (COMPLETED to CANCELLED)", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "client1" } } as any);
+    prismaMock.reservation.findUnique.mockResolvedValue({
+      ...baseReservation,
+      status: "COMPLETED",
+    });
+    const req = createRequest("http://localhost:3000/api/reservations/r1", {
+      method: "PATCH",
+      body: { status: "CANCELLED" },
+    });
+    const res = await PATCH(req, makeParams("r1"));
+    const { status } = await parseResponse(res);
+    expect(status).toBe(400);
+  });
+
+  it("returns 400 when completing before end date", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
+    prismaMock.reservation.findUnique.mockResolvedValue({
+      ...baseReservation,
+      status: "APPROVED",
+      endDate: new Date("2099-01-01"),
+    });
+    const req = createRequest("http://localhost:3000/api/reservations/r1", {
+      method: "PATCH",
+      body: { status: "COMPLETED" },
+    });
+    const res = await PATCH(req, makeParams("r1"));
+    const { status } = await parseResponse(res);
+    expect(status).toBe(400);
+  });
+
+  it("returns 409 when approving with insufficient space", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "host1" } } as any);
+    prismaMock.reservation.findUnique.mockResolvedValue({
+      ...baseReservation,
+      spaceRequested: 5,
+      listing: { id: "l1", title: "Test", spaceAvailable: 5, bookings: [] },
+    });
+    // Existing bookings take up 4 of 5 available space
+    prismaMock.booking.findMany.mockResolvedValue([
+      { startDate: new Date("2025-01-01"), endDate: new Date("2025-01-10"), reservedSpace: 4 },
+    ]);
+    const req = createRequest("http://localhost:3000/api/reservations/r1", {
+      method: "PATCH",
+      body: { status: "APPROVED" },
+    });
+    const res = await PATCH(req, makeParams("r1"));
+    const { status } = await parseResponse(res);
+    expect(status).toBe(409);
   });
 });

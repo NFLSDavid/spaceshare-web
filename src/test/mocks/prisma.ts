@@ -7,6 +7,7 @@ function modelMock() {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     upsert: vi.fn(),
     delete: vi.fn(),
     deleteMany: vi.fn(),
@@ -25,4 +26,5 @@ export const prismaMock = {
   chat: modelMock(),
   chatMember: modelMock(),
   message: modelMock(),
+  $transaction: vi.fn(<T>(fn: (tx: typeof prismaMock) => T) => fn(prismaMock)),
 };

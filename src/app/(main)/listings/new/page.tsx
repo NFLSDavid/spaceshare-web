@@ -1,123 +1,34 @@
 "use client";
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useListingForm } from "@/hooks/use-listing-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { toast } from "@/components/ui/toast";
 import { GoogleMap } from "@/components/google-map";
-import { AMENITY_LABELS, SPACE_OFFERING_LOWER_LIMIT, SPACE_UPPER_LIMIT } from "@/types";
+import { AMENITY_LABELS, SPACE_UPPER_LIMIT } from "@/types";
 import type { Amenity } from "@/types";
 import { Upload, X, Minus, Plus, MapPin, Lightbulb } from "lucide-react";
 
 export default function NewListingPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    price: "",
-    spaceAvailable: 1,
-    amenities: [] as Amenity[],
-    latitude: 0,
-    longitude: 0,
-  });
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [priceRec, setPriceRec] = useState<{ recommendedPrice: number; count: number } | null>(null);
-  const [loadingPrice, setLoadingPrice] = useState(false);
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("folder", "spaceshare/listings");
-
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        const data = await res.json();
-
-        if (res.ok) {
-          setPhotos((prev) => [...prev, data.url]);
-        }
-      }
-    } catch {
-      toast("Failed to upload image", "error");
-    }
-    setUploading(false);
-  };
-
-  const removePhoto = (index: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const toggleAmenity = (amenity: Amenity) => {
-    setForm((prev) => ({
-      ...prev,
-      amenities: prev.amenities.includes(amenity)
-        ? prev.amenities.filter((a) => a !== amenity)
-        : [...prev.amenities, amenity],
-    }));
-  };
-
-  const adjustSpace = (delta: number) => {
-    setForm((prev) => ({
-      ...prev,
-      spaceAvailable: Math.min(
-        SPACE_UPPER_LIMIT,
-        Math.max(SPACE_OFFERING_LOWER_LIMIT, prev.spaceAvailable + delta)
-      ),
-    }));
-  };
-
-  async function fetchPriceRecommendation(lat: number, lng: number) {
-    if (!lat || !lng) return;
-    setLoadingPrice(true);
-    try {
-      const res = await fetch(`/api/listings/price-recommendation?lat=${lat}&lng=${lng}`);
-      const data = await res.json();
-      setPriceRec(data);
-    } catch {}
-    setLoadingPrice(false);
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (photos.length === 0) {
-      toast("Please add at least one photo", "error");
-      return;
-    }
-    if (!form.latitude || !form.longitude) {
-      toast("Please set a location on the map", "error");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/listings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, photos }),
-      });
-
-      if (res.ok) {
-        toast("Listing created successfully!", "success");
-        router.push("/listings");
-      } else {
-        const data = await res.json();
-        toast(data.error || "Failed to create listing", "error");
-      }
-    } catch {
-      toast("An error occurred", "error");
-    }
-    setLoading(false);
-  };
+  const {
+    form,
+    updateForm,
+    photos,
+    uploading,
+    loading,
+    priceRec,
+    loadingPrice,
+    handlePhotoUpload,
+    removePhoto,
+    toggleAmenity,
+    adjustSpace,
+    fetchPriceRecommendation,
+    setLocation,
+    applyRecommendedPrice,
+    handleSubmit,
+  } = useListingForm();
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -126,12 +37,21 @@ export default function NewListingPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Photos */}
         <Card>
-          <CardHeader><h2 className="font-semibold">Photos</h2></CardHeader>
+          <CardHeader>
+            <h2 className="font-semibold">Photos</h2>
+          </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-3">
               {photos.map((url, i) => (
-                <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                <div
+                  key={i}
+                  className="relative aspect-square rounded-lg overflow-hidden bg-gray-100"
+                >
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
                   <button
                     type="button"
                     onClick={() => removePhoto(i)}
@@ -161,19 +81,21 @@ export default function NewListingPage() {
 
         {/* Details */}
         <Card>
-          <CardHeader><h2 className="font-semibold">Details</h2></CardHeader>
+          <CardHeader>
+            <h2 className="font-semibold">Details</h2>
+          </CardHeader>
           <CardContent className="space-y-4">
             <Input
               label="Title"
               value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              onChange={(e) => updateForm({ title: e.target.value })}
               placeholder="e.g. Spacious Garage Storage"
               required
             />
             <Textarea
               label="Description"
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) => updateForm({ description: e.target.value })}
               placeholder="Describe your storage space..."
               required
             />
@@ -184,7 +106,7 @@ export default function NewListingPage() {
                 step="0.01"
                 min="0"
                 value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
+                onChange={(e) => updateForm({ price: e.target.value })}
                 placeholder="0.00"
                 required
               />
@@ -194,22 +116,27 @@ export default function NewListingPage() {
                     <div className="flex items-center gap-2 text-sm">
                       <Lightbulb className="h-4 w-4 text-yellow-500" />
                       <span className="text-gray-600">
-                        Suggested: ${priceRec.recommendedPrice.toFixed(2)} (based on {priceRec.count} nearby listings)
+                        Suggested: ${priceRec.recommendedPrice.toFixed(2)}{" "}
+                        (based on {priceRec.count} nearby listings)
                       </span>
                       <button
                         type="button"
-                        onClick={() => setForm({ ...form, price: priceRec.recommendedPrice.toFixed(2) })}
+                        onClick={applyRecommendedPrice}
                         className="text-blue-600 hover:underline text-sm font-medium"
                       >
                         Apply
                       </button>
                     </div>
                   ) : priceRec && priceRec.count === 0 ? (
-                    <p className="text-xs text-gray-500 mt-1">No nearby listings to compare</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      No nearby listings to compare
+                    </p>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => fetchPriceRecommendation(form.latitude, form.longitude)}
+                      onClick={() =>
+                        fetchPriceRecommendation(form.latitude, form.longitude)
+                      }
                       className="text-sm text-blue-600 hover:underline"
                       disabled={loadingPrice}
                     >
@@ -225,16 +152,28 @@ export default function NewListingPage() {
                 Space Available: {form.spaceAvailable} m³
               </label>
               <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => adjustSpace(-0.5)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => adjustSpace(-0.5)}
+                >
                   <Minus className="h-4 w-4" />
                 </Button>
                 <div className="flex-1 bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-blue-600 rounded-full h-2 transition-all"
-                    style={{ width: `${(form.spaceAvailable / SPACE_UPPER_LIMIT) * 100}%` }}
+                    style={{
+                      width: `${(form.spaceAvailable / SPACE_UPPER_LIMIT) * 100}%`,
+                    }}
                   />
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => adjustSpace(0.5)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => adjustSpace(0.5)}
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
@@ -242,9 +181,44 @@ export default function NewListingPage() {
           </CardContent>
         </Card>
 
+        {/* Availability */}
+        <Card>
+          <CardHeader>
+            <h2 className="font-semibold">Availability</h2>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-3">
+              Set the date range when your space is available for booking.
+            </p>
+            {(() => {
+              const today = new Date().toISOString().split("T")[0];
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Available From"
+                    type="date"
+                    min={today}
+                    value={form.availableFrom}
+                    onChange={(e) => updateForm({ availableFrom: e.target.value })}
+                  />
+                  <Input
+                    label="Available To"
+                    type="date"
+                    min={form.availableFrom || today}
+                    value={form.availableTo}
+                    onChange={(e) => updateForm({ availableTo: e.target.value })}
+                  />
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
         {/* Amenities */}
         <Card>
-          <CardHeader><h2 className="font-semibold">Amenities</h2></CardHeader>
+          <CardHeader>
+            <h2 className="font-semibold">Amenities</h2>
+          </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {(Object.entries(AMENITY_LABELS) as [Amenity, string][]).map(
@@ -261,7 +235,7 @@ export default function NewListingPage() {
                   >
                     {label}
                   </button>
-                )
+                ),
               )}
             </div>
           </CardContent>
@@ -269,7 +243,9 @@ export default function NewListingPage() {
 
         {/* Location */}
         <Card>
-          <CardHeader><h2 className="font-semibold">Location</h2></CardHeader>
+          <CardHeader>
+            <h2 className="font-semibold">Location</h2>
+          </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <p className="text-sm text-gray-500">
@@ -282,16 +258,18 @@ export default function NewListingPage() {
                     : undefined
                 }
                 zoom={13}
-                onClick={(lat, lng) => {
-                  setForm({ ...form, latitude: lat, longitude: lng });
-                  setPriceRec(null);
-                  fetchPriceRecommendation(lat, lng);
-                }}
+                onClick={(lat, lng) => setLocation(lat, lng)}
                 showSearch
                 className="h-56"
                 markers={
                   form.latitude !== 0 && form.longitude !== 0
-                    ? [{ lat: form.latitude, lng: form.longitude, title: "Listing location" }]
+                    ? [
+                        {
+                          lat: form.latitude,
+                          lng: form.longitude,
+                          title: "Listing location",
+                        },
+                      ]
                     : []
                 }
               />
@@ -301,7 +279,9 @@ export default function NewListingPage() {
                   type="number"
                   step="any"
                   value={form.latitude || ""}
-                  onChange={(e) => setForm({ ...form, latitude: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) =>
+                    updateForm({ latitude: parseFloat(e.target.value) || 0 })
+                  }
                   placeholder="43.4723"
                 />
                 <Input
@@ -309,14 +289,17 @@ export default function NewListingPage() {
                   type="number"
                   step="any"
                   value={form.longitude || ""}
-                  onChange={(e) => setForm({ ...form, longitude: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) =>
+                    updateForm({ longitude: parseFloat(e.target.value) || 0 })
+                  }
                   placeholder="-80.5449"
                 />
               </div>
               {form.latitude !== 0 && form.longitude !== 0 && (
                 <div className="flex items-center gap-1 text-sm text-green-600">
                   <MapPin className="h-4 w-4" />
-                  Location set: {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+                  Location set: {form.latitude.toFixed(4)},{" "}
+                  {form.longitude.toFixed(4)}
                 </div>
               )}
             </div>
@@ -324,7 +307,12 @@ export default function NewListingPage() {
         </Card>
 
         <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={() => router.back()} className="flex-1">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            className="flex-1"
+          >
             Cancel
           </Button>
           <Button type="submit" disabled={loading} className="flex-1">

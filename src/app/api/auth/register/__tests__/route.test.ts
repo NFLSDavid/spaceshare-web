@@ -4,8 +4,8 @@ import { createRequest, parseResponse } from "@/test/helpers";
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("bcryptjs", () => ({ default: { hash: vi.fn().mockResolvedValue("hashed-pw") } }));
-vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/email-templates", () => ({
+vi.mock("@/lib/email/sender", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/email/templates", () => ({
   emailVerificationEmail: vi.fn().mockReturnValue({ subject: "Verify", html: "<p>verify</p>" }),
 }));
 vi.mock("crypto", () => ({

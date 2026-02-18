@@ -35,7 +35,7 @@ export type ListingWithBookings = Listing & {
 export type ReservationWithDetails = Reservation & {
   listing: Pick<
     Listing,
-    "id" | "title" | "photos" | "latitude" | "longitude" | "price"
+    "id" | "title" | "photos" | "latitude" | "longitude" | "price" | "isActive" | "deletedAt"
   >;
   host: Pick<User, "id" | "firstName" | "lastName" | "photoUrl" | "email">;
   client: Pick<User, "id" | "firstName" | "lastName" | "photoUrl">;

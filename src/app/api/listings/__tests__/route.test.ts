@@ -5,8 +5,8 @@ import { createRequest, parseResponse } from "@/test/helpers";
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
-vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/email-templates", () => ({
+vi.mock("@/lib/email/sender", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/email/templates", () => ({
   newListingMatchEmail: vi.fn().mockReturnValue({ subject: "Match", html: "<p>m</p>" }),
 }));
 

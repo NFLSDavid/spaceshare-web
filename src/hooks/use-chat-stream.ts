@@ -10,12 +10,17 @@ interface StreamMessage {
   createdAt: string;
 }
 
+const MAX_RETRIES = 10;
+const BASE_DELAY_MS = 1000;
+const MAX_DELAY_MS = 30000;
+
 export function useChatStream(
   chatId: string,
   onMessage: (message: StreamMessage) => void
 ) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const onMessageRef = useRef(onMessage);
+  const retryCountRef = useRef(0);
   onMessageRef.current = onMessage;
 
   const connect = useCallback(() => {
@@ -25,6 +30,10 @@ export function useChatStream(
 
     const es = new EventSource(`/api/messages/chats/${chatId}/stream`);
     eventSourceRef.current = es;
+
+    es.onopen = () => {
+      retryCountRef.current = 0;
+    };
 
     es.onmessage = (event) => {
       try {
@@ -37,12 +46,19 @@ export function useChatStream(
 
     es.onerror = () => {
       es.close();
-      // Reconnect after 3 seconds
+      if (retryCountRef.current >= MAX_RETRIES) return;
+
+      // Exponential backoff with jitter
+      const exponentialDelay = BASE_DELAY_MS * Math.pow(2, retryCountRef.current);
+      const jitter = Math.random() * 1000;
+      const delay = Math.min(exponentialDelay + jitter, MAX_DELAY_MS);
+      retryCountRef.current += 1;
+
       setTimeout(() => {
         if (eventSourceRef.current === es) {
           connect();
         }
-      }, 3000);
+      }, delay);
     };
   }, [chatId]);
 

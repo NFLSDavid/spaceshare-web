@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useModeStore } from "@/stores/mode-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +8,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { ItemDeclaration } from "@/components/item-declaration";
 import type { ReservationWithDetails, ReservationStatus } from "@/types";
-import { format, differenceInCalendarDays } from "date-fns";
-import { Calendar, DollarSign, Box, User, CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown, CreditCard } from "lucide-react";
+import { format } from "date-fns";
+import { Calendar, DollarSign, Box, User, CheckCircle, XCircle, ThumbsUp, ThumbsDown } from "lucide-react";
 
 const STATUS_BADGE: Record<string, "default" | "success" | "warning" | "error" | "info"> = {
   PENDING: "warning",
@@ -20,27 +19,24 @@ const STATUS_BADGE: Record<string, "default" | "success" | "warning" | "error" |
   COMPLETED: "success",
 };
 
-const TAX_RATE = 0.13;
-
 export default function ReservationsPage() {
   const { user } = useAuth();
-  const { isHostMode } = useModeStore();
+  const [asHost, setAsHost] = useState(false);
   const [reservations, setReservations] = useState<ReservationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ReservationWithDetails | null>(null);
   const [filter, setFilter] = useState<string>("ALL");
-  const [paymentDialog, setPaymentDialog] = useState<ReservationWithDetails | null>(null);
 
   useEffect(() => {
     fetchReservations();
-  }, [isHostMode]);
+  }, [asHost]);
 
   async function fetchReservations() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/reservations?asHost=${isHostMode}`);
+      const res = await fetch(`/api/reservations?asHost=${asHost}`);
       const data = await res.json();
-      setReservations(data);
+      setReservations(Array.isArray(data) ? data : []);
     } catch {
       toast("Failed to load reservations", "error");
     }
@@ -67,22 +63,6 @@ export default function ReservationsPage() {
     }
   }
 
-  async function markPaid(id: string) {
-    try {
-      await fetch(`/api/reservations/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentCompleted: true }),
-      });
-      toast("Payment marked as completed", "success");
-      setPaymentDialog(null);
-      setSelected(null);
-      fetchReservations();
-    } catch {
-      toast("Failed to update", "error");
-    }
-  }
-
   async function rateListing(reservation: ReservationWithDetails, liked: boolean) {
     try {
       const res = await fetch(`/api/listings/${reservation.listingId}/rate`, {
@@ -104,23 +84,35 @@ export default function ReservationsPage() {
   }
 
   const filtered = filter === "ALL" ? reservations : reservations.filter((r) => r.status === filter);
-
   const filters = ["ALL", "PENDING", "APPROVED", "DECLINED", "CANCELLED", "COMPLETED"];
-
-  function getPaymentBreakdown(r: ReservationWithDetails) {
-    const days = differenceInCalendarDays(new Date(r.endDate), new Date(r.startDate));
-    const pricePerDay = r.listing.price;
-    const subtotal = pricePerDay * r.spaceRequested * days;
-    const tax = subtotal * TAX_RATE;
-    const total = subtotal + tax;
-    return { days, pricePerDay, subtotal, tax, total };
-  }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">
-        {isHostMode ? "Reservation Requests" : "My Reservations"}
-      </h1>
+      <h1 className="text-2xl font-bold mb-4">Reservations</h1>
+
+      {/* Host / Client tab */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
+        <button
+          onClick={() => { setAsHost(false); setFilter("ALL"); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            !asHost
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          My Reservations
+        </button>
+        <button
+          onClick={() => { setAsHost(true); setFilter("ALL"); }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            asHost
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Hosting Requests
+        </button>
+      </div>
 
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
         {filters.map((f) => (
@@ -156,15 +148,18 @@ export default function ReservationsPage() {
                   <img src={r.listing.photos[0]} alt="" className="w-16 h-16 rounded-lg object-cover" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-sm truncate">{r.listing.title}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className={`font-medium text-sm truncate ${(r.listing.deletedAt || !r.listing.isActive) ? "line-through text-gray-400" : ""}`}>{r.listing.title}</h3>
                     <Badge variant={STATUS_BADGE[r.status]}>{r.status}</Badge>
                   </div>
+                  {(r.listing.deletedAt || !r.listing.isActive) && (
+                    <p className="text-xs text-red-500 font-medium">Listing no longer available</p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     {format(new Date(r.startDate), "MMM d")} - {format(new Date(r.endDate), "MMM d, yyyy")}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {isHostMode
+                    {asHost
                       ? `Client: ${r.client.firstName} ${r.client.lastName}`
                       : `Host: ${r.host.firstName} ${r.host.lastName}`}
                   </p>
@@ -204,14 +199,11 @@ export default function ReservationsPage() {
               <div className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-gray-400" />${selected.totalCost.toFixed(2)} CAD total</div>
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-gray-400" />
-                {isHostMode
+                {asHost
                   ? `Client: ${selected.client.firstName} ${selected.client.lastName}`
                   : `Host: ${selected.host.firstName} ${selected.host.lastName}`}
               </div>
               {selected.message && <p className="text-gray-600 italic">"{selected.message}"</p>}
-              {selected.paymentCompleted && (
-                <div className="flex items-center gap-1 text-green-600"><CheckCircle className="h-4 w-4" /> Payment completed</div>
-              )}
             </div>
 
             {/* Items display */}
@@ -222,7 +214,7 @@ export default function ReservationsPage() {
             )}
 
             {/* Rating section */}
-            {!isHostMode && selected.status === "APPROVED" && !selected.rated && new Date(selected.startDate) <= new Date() && (
+            {!asHost && (selected.status === "APPROVED" || selected.status === "COMPLETED") && !selected.rated && new Date(selected.startDate) <= new Date() && (
               <div className="border-t pt-3">
                 <p className="text-sm font-medium text-gray-700 mb-2">Rate your experience</p>
                 <div className="flex gap-2">
@@ -251,7 +243,7 @@ export default function ReservationsPage() {
 
             <div className="flex gap-2 pt-2">
               {/* Host actions */}
-              {isHostMode && selected.status === "PENDING" && (
+              {asHost && selected.status === "PENDING" && (
                 <>
                   <Button className="flex-1" onClick={() => updateStatus(selected.id, "APPROVED")}>
                     <CheckCircle className="h-4 w-4 mr-1" /> Approve
@@ -261,19 +253,14 @@ export default function ReservationsPage() {
                   </Button>
                 </>
               )}
-              {isHostMode && selected.status === "APPROVED" && (
+              {asHost && selected.status === "APPROVED" && (
                 <Button className="flex-1" onClick={() => updateStatus(selected.id, "COMPLETED")}>
                   <CheckCircle className="h-4 w-4 mr-1" /> Mark Completed
                 </Button>
               )}
 
               {/* Client actions */}
-              {!isHostMode && selected.status === "APPROVED" && !selected.paymentCompleted && (
-                <Button className="flex-1" onClick={() => { setPaymentDialog(selected); }}>
-                  <CreditCard className="h-4 w-4 mr-1" /> Pay Now
-                </Button>
-              )}
-              {!isHostMode && (selected.status === "PENDING" || selected.status === "APPROVED") && (
+              {!asHost && (selected.status === "PENDING" || selected.status === "APPROVED") && (
                 <Button variant="destructive" className="flex-1" onClick={() => updateStatus(selected.id, "CANCELLED")}>
                   <XCircle className="h-4 w-4 mr-1" /> Cancel
                 </Button>
@@ -281,50 +268,6 @@ export default function ReservationsPage() {
             </div>
           </div>
         )}
-      </Dialog>
-
-      {/* Payment Dialog */}
-      <Dialog
-        open={!!paymentDialog}
-        onClose={() => setPaymentDialog(null)}
-        title="Payment Details"
-        className="max-w-md"
-      >
-        {paymentDialog && (() => {
-          const { days, pricePerDay, subtotal, tax, total } = getPaymentBreakdown(paymentDialog);
-          return (
-            <div className="space-y-4">
-              <h3 className="font-semibold">{paymentDialog.listing.title}</h3>
-
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>${pricePerDay.toFixed(2)}/day x {paymentDialog.spaceRequested} m³ x {days} days</span>
-                  <span>${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-500">
-                  <span>Tax (13%)</span>
-                  <span>${tax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold border-t pt-2">
-                  <span>Total</span>
-                  <span>${total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 rounded-lg p-4 text-sm">
-                <p className="font-medium text-blue-800 mb-1">Send e-Transfer to:</p>
-                <p className="text-blue-600 font-mono">{paymentDialog.host.email}</p>
-                <p className="text-xs text-blue-500 mt-2">
-                  Host: {paymentDialog.host.firstName} {paymentDialog.host.lastName}
-                </p>
-              </div>
-
-              <Button className="w-full" onClick={() => markPaid(paymentDialog.id)}>
-                <CheckCircle className="h-4 w-4 mr-1" /> Confirm Payment
-              </Button>
-            </div>
-          );
-        })()}
       </Dialog>
     </div>
   );

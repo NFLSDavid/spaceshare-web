@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useRef, use } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { format } from "date-fns";
-import { Send, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { Send, ArrowLeft, Image as ImageIcon, ExternalLink, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 interface MessageData {
@@ -18,16 +19,27 @@ interface MessageData {
   createdAt: string;
 }
 
+interface ListingSnippet {
+  id: string;
+  title: string;
+  price: number;
+  photos: string[];
+  isActive: boolean;
+  deletedAt: string | null;
+}
+
 interface ChatData {
   id: string;
   title: string;
   photoUrl: string | null;
   messages: MessageData[];
   members: { userId: string; user: { id: string; firstName: string; lastName: string } }[];
+  listing: ListingSnippet | null;
 }
 
 export default function ChatPage({ params }: { params: Promise<{ chatId: string }> }) {
   const { chatId } = use(params);
+  const router = useRouter();
   const { user } = useAuth();
   const [chat, setChat] = useState<ChatData | null>(null);
   const [messages, setMessages] = useState<MessageData[]>([]);
@@ -35,8 +47,24 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Track whether chat was empty on load and whether any message was sent this session
+  const hadNoMessagesOnLoad = useRef(false);
+  const messagesSentInSession = useRef(false);
+
   useEffect(() => {
     fetchChat();
+  }, [chatId]);
+
+  // Auto-delete the chat on unmount if it was empty when we arrived and we never sent anything
+  useEffect(() => {
+    return () => {
+      if (hadNoMessagesOnLoad.current && !messagesSentInSession.current) {
+        fetch(`/api/messages/chats/${chatId}`, {
+          method: "DELETE",
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
   }, [chatId]);
 
   useEffect(() => {
@@ -56,8 +84,13 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
     try {
       const res = await fetch(`/api/messages/chats/${chatId}`);
       const data = await res.json();
+      if (!res.ok) { toast(data.error || "Failed to load chat", "error"); return; }
       setChat(data);
-      setMessages(data.messages);
+      const msgs = data.messages ?? [];
+      setMessages(msgs);
+      if (msgs.length === 0) {
+        hadNoMessagesOnLoad.current = true;
+      }
     } catch {
       toast("Failed to load chat", "error");
     }
@@ -76,6 +109,7 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
       });
       if (res.ok) {
         const msg = await res.json();
+        messagesSentInSession.current = true;
         setNewMessage("");
         // Add message immediately for instant feedback
         setMessages((prev) => {
@@ -108,6 +142,7 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
       });
       if (res.ok) {
         const msg = await res.json();
+        messagesSentInSession.current = true;
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
@@ -118,17 +153,86 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
     }
   }
 
+  async function deleteChat() {
+    if (!confirm("Delete this conversation? This cannot be undone.")) return;
+    try {
+      // Clear the auto-delete flag so the unmount effect doesn't double-fire
+      hadNoMessagesOnLoad.current = false;
+      const res = await fetch(`/api/messages/chats/${chatId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        toast(data.error || "Failed to delete chat", "error");
+        return;
+      }
+      router.push("/messages");
+    } catch {
+      toast("Failed to delete chat", "error");
+    }
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-6rem)] md:h-[calc(100vh-3rem)]">
       {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b">
-        <Link href="/messages" className="p-1 rounded-full hover:bg-gray-100">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        {chat?.photoUrl && (
-          <img src={chat.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
-        )}
-        <h2 className="font-semibold text-sm">{chat?.title || "Chat"}</h2>
+      <div className="pb-4 border-b space-y-3">
+        <div className="flex items-center gap-3">
+          <Link href="/messages" className="p-1 rounded-full hover:bg-gray-100">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          {chat?.photoUrl && (
+            <img src={chat.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+          )}
+          <h2 className="font-semibold text-sm flex-1">{chat?.title || "Chat"}</h2>
+          <button
+            onClick={deleteChat}
+            className="p-1.5 rounded-full hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+            title="Delete conversation"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Listing Banner */}
+        {chat?.listing && (() => {
+          const unavailable = chat.listing.deletedAt || !chat.listing.isActive;
+          if (unavailable) {
+            return (
+              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-2.5 opacity-60">
+                {chat.listing.photos[0] && (
+                  <img
+                    src={chat.listing.photos[0]}
+                    alt={chat.listing.title}
+                    className="w-12 h-12 rounded-lg object-cover shrink-0 grayscale"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500">Listing</p>
+                  <p className="text-sm font-medium truncate line-through text-gray-400">{chat.listing.title}</p>
+                  <p className="text-xs text-red-500 font-medium">No longer available</p>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <Link
+              href={`/listings/${chat.listing.id}`}
+              className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-2.5 hover:bg-gray-100 transition-colors"
+            >
+              {chat.listing.photos[0] && (
+                <img
+                  src={chat.listing.photos[0]}
+                  alt={chat.listing.title}
+                  className="w-12 h-12 rounded-lg object-cover shrink-0"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500">Listing</p>
+                <p className="text-sm font-medium truncate">{chat.listing.title}</p>
+                <p className="text-xs text-blue-600">${chat.listing.price.toFixed(2)} / day per m³</p>
+              </div>
+              <ExternalLink className="h-4 w-4 text-gray-400 shrink-0" />
+            </Link>
+          );
+        })()}
       </div>
 
       {/* Messages */}

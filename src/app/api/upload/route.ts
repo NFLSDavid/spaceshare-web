@@ -1,32 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { withAuth, ApiError } from "@/lib/api-utils";
 import { uploadImage } from "@/lib/cloudinary";
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const POST = withAuth(async (req: NextRequest) => {
+  const formData = await req.formData();
+  const file = formData.get("file") as File;
+  const folder = (formData.get("folder") as string) || "spaceshare";
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const folder = (formData.get("folder") as string) || "spaceshare";
-
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
-
-    const url = await uploadImage(base64, folder);
-
-    return NextResponse.json({ url });
-  } catch (error) {
-    console.error("Upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  if (!file) {
+    throw new ApiError(400, "No file provided");
   }
-}
+
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+  const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
+
+  const url = await uploadImage(base64, folder);
+
+  return NextResponse.json({ url });
+});

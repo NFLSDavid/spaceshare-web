@@ -28,7 +28,26 @@ export function reservationStatusEmail(
       <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <p style="margin: 4px 0;"><strong>Dates:</strong> ${dates.start} - ${dates.end}</p>
       </div>
-      ${status === "APPROVED" ? "<p>You can now proceed with payment in the app.</p>" : "<p>You can search for other available spaces.</p>"}
+      ${status === "APPROVED" ? "<p>Your space is confirmed! You can view details in the app.</p>" : "<p>You can search for other available spaces.</p>"}
+    `),
+  };
+}
+
+export function reservationCancelledByClientEmail(
+  hostName: string,
+  clientName: string,
+  listingTitle: string,
+  dates: { start: string; end: string }
+) {
+  return {
+    subject: `Reservation cancelled: ${listingTitle}`,
+    html: layout(`
+      <p>Hi ${hostName},</p>
+      <p><strong>${clientName}</strong> has cancelled their reservation for <strong>${listingTitle}</strong>.</p>
+      <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Dates:</strong> ${dates.start} - ${dates.end}</p>
+      </div>
+      <p>The space is now available for other bookings.</p>
     `),
   };
 }

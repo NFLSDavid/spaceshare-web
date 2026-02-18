@@ -41,8 +41,9 @@ export default function ListingsPage() {
     try {
       const res = await fetch(`/api/listings?hostId=${user!.id}`);
       const data = await res.json();
-      setListings(data);
-      setFiltered(data);
+      const arr = Array.isArray(data) ? data : [];
+      setListings(arr);
+      setFiltered(arr);
     } catch {
       toast("Failed to load listings", "error");
     }
@@ -53,7 +54,8 @@ export default function ListingsPage() {
     try {
       const res = await fetch(`/api/reservations?listingId=${listingId}&status=COMPLETED`);
       const data = await res.json();
-      const total = data.reduce((sum: number, r: any) => sum + r.totalCost, 0);
+      const arr = Array.isArray(data) ? data : [];
+      const total = arr.reduce((sum: number, r: any) => sum + r.totalCost, 0);
       setRevenue(Math.round(total * 100) / 100);
     } catch {
       setRevenue(0);
@@ -183,7 +185,7 @@ export default function ListingsPage() {
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
-                onClick={() => router.push(`/listings/${selectedListing.id}`)}
+                onClick={() => router.push(`/listings/${selectedListing.id}/edit`)}
               >
                 <Edit className="h-4 w-4 mr-1" /> Edit
               </Button>

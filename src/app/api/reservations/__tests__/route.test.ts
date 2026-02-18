@@ -5,8 +5,8 @@ import { createRequest, parseResponse } from "@/test/helpers";
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
-vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/email-templates", () => ({
+vi.mock("@/lib/email/sender", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/email/templates", () => ({
   newReservationRequestEmail: vi.fn().mockReturnValue({ subject: "New Req", html: "<p>r</p>" }),
 }));
 vi.mock("date-fns", () => ({
@@ -167,7 +167,7 @@ describe("POST /api/reservations", () => {
 
   it("sends email notification to host", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
-    const sendEmail = (await import("@/lib/email")).sendEmail;
+    const sendEmail = (await import("@/lib/email/sender")).sendEmail;
     prismaMock.listing.findUnique.mockResolvedValue({
       id: "l1",
       hostId: "host1",

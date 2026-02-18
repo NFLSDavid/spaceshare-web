@@ -1,271 +1,164 @@
 "use client";
-import { useState, useEffect, use } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { toast } from "@/components/ui/toast";
+import { useAuth } from "@/hooks/use-auth";
+import { ImageCarousel } from "@/components/image-carousel";
 import { GoogleMap } from "@/components/google-map";
-import { AMENITY_LABELS, SPACE_OFFERING_LOWER_LIMIT, SPACE_UPPER_LIMIT } from "@/types";
-import type { Amenity, ListingWithHost } from "@/types";
-import { Upload, X, Minus, Plus, MapPin, Lightbulb } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import { AMENITY_LABELS } from "@/types";
+import type { ListingWithHost, Amenity } from "@/types";
+import { ArrowLeft, MapPin, Box, Edit, MessageSquare } from "lucide-react";
+import Link from "next/link";
 
-export default function EditListingPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ListingDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    price: "",
-    spaceAvailable: 1,
-    amenities: [] as Amenity[],
-    latitude: 0,
-    longitude: 0,
-  });
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [priceRec, setPriceRec] = useState<{ recommendedPrice: number; count: number } | null>(null);
-  const [loadingPrice, setLoadingPrice] = useState(false);
+  const { user } = useAuth();
+  const [listing, setListing] = useState<ListingWithHost | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchListing() {
-      try {
-        const res = await fetch(`/api/listings/${id}`);
-        const data: ListingWithHost = await res.json();
-        setForm({
-          title: data.title,
-          description: data.description,
-          price: data.price.toString(),
-          spaceAvailable: data.spaceAvailable,
-          amenities: data.amenities as Amenity[],
-          latitude: data.latitude,
-          longitude: data.longitude,
-        });
-        setPhotos(data.photos);
-      } catch {
-        toast("Failed to load listing", "error");
-      }
-      setFetching(false);
-    }
-    fetchListing();
+    fetch(`/api/listings/${id}`)
+      .then((r) => r.json())
+      .then((data) => { setListing(data); setLoading(false); })
+      .catch(() => { toast("Failed to load listing", "error"); setLoading(false); });
   }, [id]);
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    setUploading(true);
+  async function handleContactHost() {
+    if (!user) { router.push("/login"); return; }
+    if (!listing) return;
+
     try {
-      for (const file of Array.from(files)) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("folder", "spaceshare/listings");
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        const data = await res.json();
-        if (res.ok) setPhotos((prev) => [...prev, data.url]);
-      }
-    } catch {
-      toast("Failed to upload image", "error");
-    }
-    setUploading(false);
-  };
-
-  const adjustSpace = (delta: number) => {
-    setForm((prev) => ({
-      ...prev,
-      spaceAvailable: Math.min(SPACE_UPPER_LIMIT, Math.max(SPACE_OFFERING_LOWER_LIMIT, prev.spaceAvailable + delta)),
-    }));
-  };
-
-  const toggleAmenity = (amenity: Amenity) => {
-    setForm((prev) => ({
-      ...prev,
-      amenities: prev.amenities.includes(amenity)
-        ? prev.amenities.filter((a) => a !== amenity)
-        : [...prev.amenities, amenity],
-    }));
-  };
-
-  async function fetchPriceRecommendation(lat: number, lng: number) {
-    if (!lat || !lng) return;
-    setLoadingPrice(true);
-    try {
-      const res = await fetch(`/api/listings/price-recommendation?lat=${lat}&lng=${lng}`);
+      const res = await fetch("/api/messages/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: listing.id,
+          memberIds: [user.id, listing.hostId],
+          title: listing.title,
+          photoUrl: listing.photos[0] ?? null,
+        }),
+      });
       const data = await res.json();
-      setPriceRec(data);
-    } catch {}
-    setLoadingPrice(false);
+      if (!res.ok) { toast(data.error || "Failed to start chat", "error"); return; }
+      router.push(`/messages/${data.id}`);
+    } catch {
+      toast("Failed to start chat", "error");
+    }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (photos.length === 0) {
-      toast("Please add at least one photo", "error");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/listings/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, photos }),
-      });
-      if (res.ok) {
-        toast("Listing updated!", "success");
-        router.push("/listings");
-      } else {
-        const data = await res.json();
-        toast(data.error || "Failed to update", "error");
-      }
-    } catch {
-      toast("An error occurred", "error");
-    }
-    setLoading(false);
-  };
+  if (loading) return <div className="text-center py-20 text-gray-500">Loading...</div>;
+  if (!listing) return <div className="text-center py-20 text-gray-500">Listing not found</div>;
 
-  if (fetching) return <div className="text-center py-12 text-gray-500">Loading...</div>;
+  const isOwner = user?.id === listing.hostId;
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Edit Listing</h1>
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Back */}
+      <button
+        onClick={() => router.back()}
+        className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Card>
-          <CardHeader><h2 className="font-semibold">Photos</h2></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-3">
-              {photos.map((url, i) => (
-                <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="absolute top-1 right-1 p-1 rounded-full bg-red-500 text-white"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <label className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-300 cursor-pointer hover:border-blue-400">
-                <Upload className="h-6 w-6 text-gray-400" />
-                <span className="text-xs text-gray-400 mt-1">{uploading ? "Uploading..." : "Add"}</span>
-                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} disabled={uploading} />
-              </label>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Photos */}
+      <ImageCarousel images={listing.photos} className="aspect-video rounded-xl overflow-hidden" />
 
-        <Card>
-          <CardHeader><h2 className="font-semibold">Details</h2></CardHeader>
-          <CardContent className="space-y-4">
-            <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-            <Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
-            <div>
-              <Input label="Price (CAD/day per m³)" type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
-              {form.latitude !== 0 && form.longitude !== 0 && (
-                <div className="mt-2">
-                  {priceRec && priceRec.count > 0 ? (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Lightbulb className="h-4 w-4 text-yellow-500" />
-                      <span className="text-gray-600">
-                        Suggested: ${priceRec.recommendedPrice.toFixed(2)} (based on {priceRec.count} nearby listings)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setForm({ ...form, price: priceRec.recommendedPrice.toFixed(2) })}
-                        className="text-blue-600 hover:underline text-sm font-medium"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  ) : priceRec && priceRec.count === 0 ? (
-                    <p className="text-xs text-gray-500 mt-1">No nearby listings to compare</p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fetchPriceRecommendation(form.latitude, form.longitude)}
-                      className="text-sm text-blue-600 hover:underline"
-                      disabled={loadingPrice}
-                    >
-                      {loadingPrice ? "Loading..." : "Suggest Price"}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Space Available: {form.spaceAvailable} m³</label>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => adjustSpace(-0.5)}><Minus className="h-4 w-4" /></Button>
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-600 rounded-full h-2 transition-all" style={{ width: `${(form.spaceAvailable / SPACE_UPPER_LIMIT) * 100}%` }} />
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => adjustSpace(0.5)}><Plus className="h-4 w-4" /></Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><h2 className="font-semibold">Amenities</h2></CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {(Object.entries(AMENITY_LABELS) as [Amenity, string][]).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => toggleAmenity(key)}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${form.amenities.includes(key) ? "bg-blue-100 border-blue-300 text-blue-700" : "bg-white border-gray-300 text-gray-600"}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><h2 className="font-semibold">Location</h2></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500">Click on the map or search to set location.</p>
-              <GoogleMap
-                center={
-                  form.latitude !== 0 && form.longitude !== 0
-                    ? { lat: form.latitude, lng: form.longitude }
-                    : undefined
-                }
-                zoom={13}
-                onClick={(lat, lng) => {
-                  setForm({ ...form, latitude: lat, longitude: lng });
-                  setPriceRec(null);
-                  fetchPriceRecommendation(lat, lng);
-                }}
-                showSearch
-                className="h-56"
-                markers={
-                  form.latitude !== 0 && form.longitude !== 0
-                    ? [{ lat: form.latitude, lng: form.longitude, title: "Listing location" }]
-                    : []
-                }
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <Input label="Latitude" type="number" step="any" value={form.latitude || ""} onChange={(e) => setForm({ ...form, latitude: parseFloat(e.target.value) || 0 })} />
-                <Input label="Longitude" type="number" step="any" value={form.longitude || ""} onChange={(e) => setForm({ ...form, longitude: parseFloat(e.target.value) || 0 })} />
-              </div>
-              {form.latitude !== 0 && form.longitude !== 0 && (
-                <div className="flex items-center gap-1 text-sm text-green-600 mt-2">
-                  <MapPin className="h-4 w-4" />
-                  {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={() => router.back()} className="flex-1">Cancel</Button>
-          <Button type="submit" disabled={loading} className="flex-1">{loading ? "Saving..." : "Save Changes"}</Button>
+      {/* Title & Price */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{listing.title}</h1>
+          {listing.host && (
+            <p className="text-sm text-gray-500 mt-1">
+              by {listing.host.firstName} {listing.host.lastName}
+            </p>
+          )}
         </div>
-      </form>
+        <div className="text-right shrink-0">
+          <p className="text-xl font-bold text-blue-600">${listing.price.toFixed(2)}</p>
+          <p className="text-xs text-gray-400">CAD / day per m³</p>
+        </div>
+      </div>
+
+      {/* Status + Space */}
+      <div className="flex items-center gap-3">
+        <Badge variant={listing.isActive ? "success" : "warning"}>
+          {listing.isActive ? "Available" : "Unavailable"}
+        </Badge>
+        <span className="flex items-center gap-1 text-sm text-gray-500">
+          <Box className="h-4 w-4" />
+          {listing.spaceAvailable} m³ available
+        </span>
+      </div>
+
+      {/* Description */}
+      <div>
+        <h2 className="font-semibold mb-2">Description</h2>
+        <p className="text-sm text-gray-600 whitespace-pre-line">{listing.description}</p>
+      </div>
+
+      {/* Amenities */}
+      {listing.amenities.length > 0 && (
+        <div>
+          <h2 className="font-semibold mb-2">Amenities</h2>
+          <div className="flex flex-wrap gap-2">
+            {(listing.amenities as Amenity[]).map((a) => (
+              <Badge key={a} variant="info">{AMENITY_LABELS[a]}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Availability */}
+      {(listing.availableFrom || listing.availableTo) && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          <span className="font-medium">Available:</span>
+          {listing.availableFrom
+            ? new Date(listing.availableFrom).toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" })
+            : "Any time"}
+          {" → "}
+          {listing.availableTo
+            ? new Date(listing.availableTo).toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" })
+            : "Open-ended"}
+        </div>
+      )}
+
+      {/* Map */}
+      {listing.latitude !== 0 && listing.longitude !== 0 && (
+        <div>
+          <h2 className="font-semibold mb-2 flex items-center gap-1">
+            <MapPin className="h-4 w-4" /> Location
+          </h2>
+          <GoogleMap
+            center={{ lat: listing.latitude, lng: listing.longitude }}
+            zoom={14}
+            markers={[{ lat: listing.latitude, lng: listing.longitude, title: listing.title }]}
+            className="h-52 rounded-xl overflow-hidden"
+          />
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-2">
+        {isOwner ? (
+          <Link href={`/listings/${id}/edit`} className="flex-1">
+            <Button variant="outline" className="w-full">
+              <Edit className="h-4 w-4 mr-2" /> Edit Listing
+            </Button>
+          </Link>
+        ) : (
+          <Button onClick={handleContactHost} className="flex-1">
+            <MessageSquare className="h-4 w-4 mr-2" /> Contact Host
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

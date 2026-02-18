@@ -81,8 +81,7 @@ describe("POST /api/shortlist", () => {
   it("creates shortlist on first use", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.shortlist.findUnique.mockResolvedValue(null);
-    prismaMock.shortlist.create.mockResolvedValue({ userId: "u1", listingIds: [] });
-    prismaMock.shortlist.update.mockResolvedValue({ userId: "u1", listingIds: ["l1"] });
+    prismaMock.shortlist.upsert.mockResolvedValue({ userId: "u1", listingIds: ["l1"] });
     const req = createRequest("http://localhost:3000/api/shortlist", {
       method: "POST",
       body: { listingId: "l1", action: "add" },
@@ -90,21 +89,21 @@ describe("POST /api/shortlist", () => {
     const res = await POST(req);
     const { status } = await parseResponse(res);
     expect(status).toBe(200);
-    expect(prismaMock.shortlist.create).toHaveBeenCalled();
+    expect(prismaMock.shortlist.upsert).toHaveBeenCalled();
   });
 
   it("adds listing with action=add", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.shortlist.findUnique.mockResolvedValue({ userId: "u1", listingIds: [] });
-    prismaMock.shortlist.update.mockResolvedValue({ listingIds: ["l1"] });
+    prismaMock.shortlist.upsert.mockResolvedValue({ listingIds: ["l1"] });
     const req = createRequest("http://localhost:3000/api/shortlist", {
       method: "POST",
       body: { listingId: "l1", action: "add" },
     });
     await POST(req);
-    expect(prismaMock.shortlist.update).toHaveBeenCalledWith(
+    expect(prismaMock.shortlist.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { listingIds: ["l1"] },
+        update: { listingIds: ["l1"] },
       })
     );
   });
@@ -112,15 +111,15 @@ describe("POST /api/shortlist", () => {
   it("removes listing with action=remove", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.shortlist.findUnique.mockResolvedValue({ userId: "u1", listingIds: ["l1", "l2"] });
-    prismaMock.shortlist.update.mockResolvedValue({ listingIds: ["l2"] });
+    prismaMock.shortlist.upsert.mockResolvedValue({ listingIds: ["l2"] });
     const req = createRequest("http://localhost:3000/api/shortlist", {
       method: "POST",
       body: { listingId: "l1", action: "remove" },
     });
     await POST(req);
-    expect(prismaMock.shortlist.update).toHaveBeenCalledWith(
+    expect(prismaMock.shortlist.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { listingIds: ["l2"] },
+        update: { listingIds: ["l2"] },
       })
     );
   });
@@ -128,15 +127,15 @@ describe("POST /api/shortlist", () => {
   it("toggles listing with action=toggle (add)", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.shortlist.findUnique.mockResolvedValue({ userId: "u1", listingIds: [] });
-    prismaMock.shortlist.update.mockResolvedValue({ listingIds: ["l1"] });
+    prismaMock.shortlist.upsert.mockResolvedValue({ listingIds: ["l1"] });
     const req = createRequest("http://localhost:3000/api/shortlist", {
       method: "POST",
       body: { listingId: "l1", action: "toggle" },
     });
     await POST(req);
-    expect(prismaMock.shortlist.update).toHaveBeenCalledWith(
+    expect(prismaMock.shortlist.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { listingIds: ["l1"] },
+        update: { listingIds: ["l1"] },
       })
     );
   });
@@ -144,15 +143,15 @@ describe("POST /api/shortlist", () => {
   it("toggles listing with action=toggle (remove)", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     prismaMock.shortlist.findUnique.mockResolvedValue({ userId: "u1", listingIds: ["l1"] });
-    prismaMock.shortlist.update.mockResolvedValue({ listingIds: [] });
+    prismaMock.shortlist.upsert.mockResolvedValue({ listingIds: [] });
     const req = createRequest("http://localhost:3000/api/shortlist", {
       method: "POST",
       body: { listingId: "l1", action: "toggle" },
     });
     await POST(req);
-    expect(prismaMock.shortlist.update).toHaveBeenCalledWith(
+    expect(prismaMock.shortlist.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { listingIds: [] },
+        update: { listingIds: [] },
       })
     );
   });

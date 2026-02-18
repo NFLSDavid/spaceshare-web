@@ -520,12 +520,15 @@ export default function SearchPage() {
         title={`Reserve: ${reserveDialog?.title || ""}`}
         className="max-w-lg"
       >
-        {reserveDialog && (
+        {reserveDialog && (() => {
+          const today = new Date().toISOString().split("T")[0];
+          return (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Start Date"
                 type="date"
+                min={today}
                 value={reserveForm.startDate}
                 onChange={(e) => {
                   setReserveForm({ ...reserveForm, startDate: e.target.value });
@@ -538,6 +541,7 @@ export default function SearchPage() {
               <Input
                 label="End Date"
                 type="date"
+                min={reserveForm.startDate || today}
                 value={reserveForm.endDate}
                 onChange={(e) => {
                   setReserveForm({ ...reserveForm, endDate: e.target.value });
@@ -568,7 +572,7 @@ export default function SearchPage() {
               <input
                 type="range"
                 min={SPACE_BOOKING_LOWER_LIMIT || 0.5}
-                max={reserveDialog.spaceAvailable}
+                max={minAvailable !== null ? minAvailable : reserveDialog.spaceAvailable}
                 step="0.5"
                 value={reserveForm.spaceRequested}
                 onChange={(e) => setReserveForm({ ...reserveForm, spaceRequested: parseFloat(e.target.value) })}
@@ -609,7 +613,8 @@ export default function SearchPage() {
               {reserving ? "Submitting..." : "Submit Reservation Request"}
             </Button>
           </div>
-        )}
+        );
+        })()}
       </Dialog>
     </div>
   );

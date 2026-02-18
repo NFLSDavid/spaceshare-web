@@ -3,15 +3,15 @@ import { prismaMock } from "@/test/mocks/prisma";
 import { createRequest, parseResponse } from "@/test/helpers";
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/email-templates", () => ({
+vi.mock("@/lib/email/sender", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/email/templates", () => ({
   passwordResetEmail: vi.fn().mockReturnValue({ subject: "Reset", html: "<p>reset</p>" }),
 }));
 vi.mock("crypto", () => ({
   default: { randomBytes: vi.fn().mockReturnValue({ toString: () => "reset-token" }) },
 }));
 
-import { sendEmail } from "@/lib/email";
+import { sendEmail } from "@/lib/email/sender";
 const { POST } = await import("../../forgot-password/route");
 
 describe("POST /api/auth/forgot-password", () => {

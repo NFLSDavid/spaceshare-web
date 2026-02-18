@@ -1,57 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { withAuth, parseBody } from "@/lib/api-utils";
+import { updatePreferencesSchema } from "@/lib/schemas";
+import { preferencesService } from "@/lib/services";
 
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const GET = withAuth(async (req: NextRequest, session) => {
+  const prefs = await preferencesService.getPreferences(session.user.id);
+  return NextResponse.json(prefs);
+});
 
-    const prefs = await prisma.preferences.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    return NextResponse.json(prefs || { userId: session.user.id, isActive: false, radius: 5 });
-  } catch (error) {
-    console.error("Preferences GET error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
-
-export async function PUT(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await req.json();
-
-    const prefs = await prisma.preferences.upsert({
-      where: { userId: session.user.id },
-      update: {
-        isActive: body.isActive,
-        latitude: body.latitude,
-        longitude: body.longitude,
-        radius: body.radius,
-        email: body.email,
-      },
-      create: {
-        userId: session.user.id,
-        isActive: body.isActive ?? false,
-        latitude: body.latitude,
-        longitude: body.longitude,
-        radius: body.radius ?? 5,
-        email: body.email || session.user.email,
-      },
-    });
-
-    return NextResponse.json(prefs);
-  } catch (error) {
-    console.error("Preferences PUT error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
+export const PUT = withAuth(async (req: NextRequest, session) => {
+  const data = await parseBody(req, updatePreferencesSchema);
+  const prefs = await preferencesService.updatePreferences(
+    session.user.id,
+    session.user.email,
+    data,
+  );
+  return NextResponse.json(prefs);
+});

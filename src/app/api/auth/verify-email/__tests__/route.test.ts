@@ -7,8 +7,8 @@ vi.mock("next-auth", () => ({
   getServerSession: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
-vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/email-templates", () => ({
+vi.mock("@/lib/email/sender", () => ({ sendEmail: vi.fn() }));
+vi.mock("@/lib/email/templates", () => ({
   emailVerificationEmail: vi.fn().mockReturnValue({ subject: "Verify", html: "<p>v</p>" }),
 }));
 vi.mock("crypto", () => ({

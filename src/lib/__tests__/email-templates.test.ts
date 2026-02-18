@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   reservationStatusEmail,
+  reservationCancelledByClientEmail,
   newReservationRequestEmail,
   newListingMatchEmail,
   emailVerificationEmail,
   passwordResetEmail,
-} from "../email-templates";
+} from "../email/templates";
 
 describe("reservationStatusEmail", () => {
   it("has correct subject for APPROVED", () => {
@@ -52,6 +53,35 @@ describe("reservationStatusEmail", () => {
 
   it("HTML contains SpaceShare layout", () => {
     const result = reservationStatusEmail("A", "B", "APPROVED", {
+      start: "x",
+      end: "y",
+    });
+    expect(result.html).toContain("SpaceShare");
+  });
+});
+
+describe("reservationCancelledByClientEmail", () => {
+  it("has correct subject", () => {
+    const result = reservationCancelledByClientEmail("Host", "Client Name", "My Listing", {
+      start: "Jan 1",
+      end: "Jan 5",
+    });
+    expect(result.subject).toBe("Reservation cancelled: My Listing");
+  });
+
+  it("HTML contains host name, client name, and dates", () => {
+    const result = reservationCancelledByClientEmail("HostName", "ClientName", "Title", {
+      start: "Jan 1",
+      end: "Jan 5",
+    });
+    expect(result.html).toContain("HostName");
+    expect(result.html).toContain("ClientName");
+    expect(result.html).toContain("Jan 1");
+    expect(result.html).toContain("Jan 5");
+  });
+
+  it("HTML wraps in SpaceShare layout", () => {
+    const result = reservationCancelledByClientEmail("A", "B", "C", {
       start: "x",
       end: "y",
     });

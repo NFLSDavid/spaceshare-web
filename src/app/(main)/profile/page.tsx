@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useModeStore } from "@/stores/mode-store";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +10,7 @@ import { toast } from "@/components/ui/toast";
 import { signOut } from "next-auth/react";
 import {
   User as UserIcon, Mail, Phone, Shield, Camera, Upload,
-  ArrowLeftRight, LogOut, Heart, Settings,
+  LogOut, Heart,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -28,7 +27,6 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const { isHostMode, toggleMode } = useModeStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editDialog, setEditDialog] = useState(false);
@@ -204,10 +202,6 @@ export default function ProfilePage() {
 
       {/* Actions */}
       <div className="space-y-2">
-        <Button variant="outline" className="w-full justify-start" onClick={toggleMode}>
-          <ArrowLeftRight className="h-4 w-4 mr-3" />
-          Switch to {isHostMode ? "Client" : "Host"} Mode
-        </Button>
         <Link href="/shortlist">
           <Button variant="outline" className="w-full justify-start">
             <Heart className="h-4 w-4 mr-3" />
