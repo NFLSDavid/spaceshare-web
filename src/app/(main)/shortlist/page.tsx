@@ -1,11 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ListingCard } from "@/components/listing-card";
 import { toast } from "@/components/ui/toast";
 import type { ListingWithHost } from "@/types";
 import { Heart } from "lucide-react";
 
 export default function ShortlistPage() {
+  const router = useRouter();
   const [listings, setListings] = useState<ListingWithHost[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,6 +57,7 @@ export default function ShortlistPage() {
             <ListingCard
               key={listing.id}
               listing={listing}
+              onClick={() => router.push(`/listings/${listing.id}`)}
               onShortlist={() => removeFromShortlist(listing.id)}
               isShortlisted
               showHost

@@ -164,7 +164,11 @@ export default function ReservationsPage() {
         <div className="text-center py-12 text-gray-500">No reservations found</div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((r) => (
+          {filtered.map((r) => {
+            // Active contracts (APPROVED/CANCEL_REQUESTED) are unaffected by listing deletion
+            const activeContract = r.status === "APPROVED" || r.status === "CANCEL_REQUESTED";
+            const listingGone = (r.listing.deletedAt || !r.listing.isActive) && !activeContract;
+            return (
             <Card key={r.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelected(r)}>
               <CardContent className="flex items-center gap-4 py-4">
                 {r.listing.photos[0] && (
@@ -172,10 +176,10 @@ export default function ReservationsPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className={`font-medium text-sm truncate ${(r.listing.deletedAt || !r.listing.isActive) ? "line-through text-gray-400" : ""}`}>{r.listing.title}</h3>
+                    <h3 className={`font-medium text-sm truncate ${listingGone ? "line-through text-gray-400" : ""}`}>{r.listing.title}</h3>
                     <Badge variant={STATUS_BADGE[r.status]}>{r.status.replace("_", " ")}</Badge>
                   </div>
-                  {(r.listing.deletedAt || !r.listing.isActive) && (
+                  {listingGone && (
                     <p className="text-xs text-red-500 font-medium">Listing no longer available</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
@@ -193,7 +197,8 @@ export default function ReservationsPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

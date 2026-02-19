@@ -400,25 +400,7 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
 
         {/* Listing Banner */}
         {chat?.listing && (() => {
-          const unavailable = chat.listing.deletedAt || !chat.listing.isActive;
-          if (unavailable) {
-            return (
-              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-2.5 opacity-60">
-                {chat.listing.photos[0] && (
-                  <img
-                    src={chat.listing.photos[0]}
-                    alt={chat.listing.title}
-                    className="w-12 h-12 rounded-lg object-cover shrink-0 grayscale"
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">Listing</p>
-                  <p className="text-sm font-medium truncate line-through text-gray-400">{chat.listing.title}</p>
-                  <p className="text-xs text-red-500 font-medium">No longer available</p>
-                </div>
-              </div>
-            );
-          }
+          const inactive = !!chat.listing.deletedAt || !chat.listing.isActive;
           return (
             <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-2.5">
               <Link
@@ -435,11 +417,14 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-gray-500">Listing</p>
                   <p className="text-sm font-medium truncate">{chat.listing.title}</p>
-                  <p className="text-xs text-blue-600">${chat.listing.price.toFixed(2)} / day per m³</p>
+                  {inactive
+                    ? <p className="text-xs text-gray-400">Not accepting new reservations</p>
+                    : <p className="text-xs text-blue-600">${chat.listing.price.toFixed(2)} / day per m³</p>
+                  }
                 </div>
                 <ExternalLink className="h-4 w-4 text-gray-400 shrink-0" />
               </Link>
-              {isClient && (
+              {isClient && !inactive && (
                 <button
                   onClick={openProposalDialog}
                   className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
