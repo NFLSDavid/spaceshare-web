@@ -11,6 +11,7 @@ import {
   MessageSquare,
   User,
   LogOut,
+  History,
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/listings", label: "My Listings", icon: Home },
   { href: "/reservations", label: "Reservations", icon: CalendarCheck },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/history", label: "History", icon: History },
   { href: "/profile", label: "Profile", icon: User },
 ];
 

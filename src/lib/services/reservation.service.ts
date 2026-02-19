@@ -3,8 +3,10 @@ import type { Prisma } from "@/generated/prisma";
 import {
   reservationRepository,
   listingRepository,
+  userRepository,
 } from "@/lib/repositories";
 import { notificationService } from "./notification.service";
+import { checkAvailability, calculateCost } from "@/lib/availability";
 
 // ─── State Pattern ────────────────────────────────────────────────────────────
 // Each TransitionHandler owns the business logic for one status transition.
@@ -20,38 +22,12 @@ type ReservationResult = Awaited<ReturnType<typeof reservationRepository.update>
 interface TransitionContext {
   reservationId: string;
   reservation: ReservationWithListing;
+  userId: string;
 }
 
 interface TransitionHandler {
-  readonly requiredRole: "host" | "client";
+  readonly requiredRole: "host" | "client" | "either";
   execute(ctx: TransitionContext): Promise<ReservationResult>;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function checkAvailability(
-  bookings: { startDate: Date; endDate: Date; reservedSpace: number }[],
-  start: Date,
-  end: Date,
-  totalSpace: number,
-): number {
-  const overlapping = bookings.filter(
-    (b) => new Date(b.startDate) < end && new Date(b.endDate) > start,
-  );
-  const bookedSpace = overlapping.reduce((sum, b) => sum + b.reservedSpace, 0);
-  return totalSpace - bookedSpace;
-}
-
-function calculateCost(
-  pricePerUnit: number,
-  space: number,
-  startDate: Date,
-  endDate: Date,
-): number {
-  const days = Math.ceil(
-    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  return Math.round(pricePerUnit * space * days * 100) / 100;
 }
 
 // ─── Transition Handlers ──────────────────────────────────────────────────────
@@ -101,6 +77,10 @@ const declineHandler: TransitionHandler = {
     const updated = await reservationRepository.update(reservationId, {
       status: "DECLINED",
     });
+    // Block the host from client's perspective so their listings are hidden
+    userRepository
+      .addBlockedUser(reservation.clientId, reservation.hostId)
+      .catch(console.error);
     notificationService
       .notifyClientOfStatusChange(
         reservation.clientId,
@@ -149,6 +129,44 @@ const completeHandler: TransitionHandler = {
   },
 };
 
+const cancelRequestHandler: TransitionHandler = {
+  requiredRole: "either",
+  async execute({ reservationId, userId }) {
+    return reservationRepository.update(reservationId, {
+      status: "CANCEL_REQUESTED",
+      cancelRequestedBy: userId,
+    });
+  },
+};
+
+const cancelApproveHandler: TransitionHandler = {
+  requiredRole: "either",
+  async execute({ reservationId, reservation, userId }) {
+    if (reservation.cancelRequestedBy === userId) {
+      throw new ApiError(400, "Cannot approve your own cancellation request");
+    }
+    return reservationRepository.cancelWithBookingCleanup(reservationId, {
+      listingId: reservation.listingId,
+      startDate: reservation.startDate,
+      endDate: reservation.endDate,
+      reservedSpace: reservation.spaceRequested,
+    });
+  },
+};
+
+const cancelRejectHandler: TransitionHandler = {
+  requiredRole: "either",
+  async execute({ reservationId, reservation, userId }) {
+    if (reservation.cancelRequestedBy === userId) {
+      throw new ApiError(400, "Cannot reject your own cancellation request");
+    }
+    return reservationRepository.update(reservationId, {
+      status: "APPROVED",
+      cancelRequestedBy: null,
+    });
+  },
+};
+
 // ─── Transition Table ─────────────────────────────────────────────────────────
 
 const TRANSITIONS: Record<string, Record<string, TransitionHandler>> = {
@@ -159,17 +177,21 @@ const TRANSITIONS: Record<string, Record<string, TransitionHandler>> = {
   },
   APPROVED: {
     COMPLETED: completeHandler,
-    CANCELLED: cancelHandler,
+    CANCEL_REQUESTED: cancelRequestHandler,
+  },
+  CANCEL_REQUESTED: {
+    CANCELLED: cancelApproveHandler,
+    APPROVED: cancelRejectHandler,
   },
 };
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const reservationService = {
-  async getReservations(userId: string, asHost: boolean) {
+  async getReservations(userId: string, asHost: boolean, cleared: boolean = false) {
     return asHost
-      ? reservationRepository.findByHost(userId)
-      : reservationRepository.findByClient(userId);
+      ? reservationRepository.findByHost(userId, cleared)
+      : reservationRepository.findByClient(userId, cleared);
   },
 
   async create(params: {
@@ -221,7 +243,6 @@ export const reservationService = {
       items: (params.items as Prisma.InputJsonValue) || undefined,
     });
 
-    // Fire-and-forget email notification
     notificationService
       .notifyHostOfNewReservation(
         listing.hostId,
@@ -261,20 +282,45 @@ export const reservationService = {
         );
       }
       if (
-        (handler.requiredRole === "host" && !isHost) ||
-        (handler.requiredRole === "client" && !isClient)
+        handler.requiredRole !== "either" &&
+        ((handler.requiredRole === "host" && !isHost) ||
+         (handler.requiredRole === "client" && !isClient))
       ) {
         throw new ApiError(
           403,
           `Only the ${handler.requiredRole} can ${params.status.toLowerCase()} this reservation`,
         );
       }
-      return handler.execute({ reservationId: params.reservationId, reservation });
+      return handler.execute({
+        reservationId: params.reservationId,
+        reservation,
+        userId: params.userId,
+      });
     }
 
     // Non-status updates (e.g., rated)
     const updateData: { rated?: boolean } = {};
     if (params.rated !== undefined) updateData.rated = params.rated;
     return reservationRepository.update(params.reservationId, updateData);
+  },
+
+  async clearReservation(reservationId: string, userId: string) {
+    const reservation = await reservationRepository.findById(reservationId);
+    if (!reservation) throw new ApiError(404, "Reservation not found");
+
+    const isHost = reservation.hostId === userId;
+    const isClient = reservation.clientId === userId;
+    if (!isHost && !isClient) throw new ApiError(403, "Forbidden");
+
+    const terminalStates = ["CANCELLED", "DECLINED", "COMPLETED"];
+    if (!terminalStates.includes(reservation.status)) {
+      throw new ApiError(400, "Only completed, cancelled, or declined reservations can be cleared");
+    }
+
+    const updateData: { clearedByHost?: boolean; clearedByClient?: boolean } = {};
+    if (isHost) updateData.clearedByHost = true;
+    if (isClient) updateData.clearedByClient = true;
+
+    return reservationRepository.update(reservationId, updateData);
   },
 };

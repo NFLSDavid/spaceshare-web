@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { AMENITY_LABELS } from "@/types";
 import type { ListingWithHost, Amenity } from "@/types";
-import { ArrowLeft, MapPin, Box, Edit, MessageSquare } from "lucide-react";
+import { ArrowLeft, MapPin, Box, Edit, MessageSquare, Mail, Phone } from "lucide-react";
 import Link from "next/link";
 
 export default function ListingDetailPage({
@@ -145,6 +145,25 @@ export default function ListingDetailPage({
         </div>
       )}
 
+      {/* Host contact info */}
+      {!isOwner && (listing.host.showEmail || listing.host.showPhone) && (
+        <div className="space-y-2">
+          <h2 className="font-semibold">Contact</h2>
+          {listing.host.showEmail && listing.host.email && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Mail className="h-4 w-4 text-gray-400" />
+              <a href={`mailto:${listing.host.email}`} className="hover:text-blue-600">{listing.host.email}</a>
+            </div>
+          )}
+          {listing.host.showPhone && listing.host.phone && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Phone className="h-4 w-4 text-gray-400" />
+              <a href={`tel:${listing.host.phone}`} className="hover:text-blue-600">{listing.host.phone}</a>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         {isOwner ? (
@@ -154,7 +173,7 @@ export default function ListingDetailPage({
             </Button>
           </Link>
         ) : (
-          <Button onClick={handleContactHost} className="flex-1">
+          <Button variant="outline" onClick={handleContactHost} className="flex-1">
             <MessageSquare className="h-4 w-4 mr-2" /> Contact Host
           </Button>
         )}

@@ -5,19 +5,18 @@ import { useAuth } from "@/hooks/use-auth";
 import { ListingCard } from "@/components/listing-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog } from "@/components/ui/dialog";
 import { ImageCarousel } from "@/components/image-carousel";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toast";
-import { ItemDeclaration } from "@/components/item-declaration";
 import { GoogleMap } from "@/components/google-map";
 import { calculateDistanceKm } from "@/lib/geo";
-import { AMENITY_LABELS, SPACE_UPPER_LIMIT, DEFAULT_MAX_PRICE, SPACE_BOOKING_LOWER_LIMIT } from "@/types";
+import { AMENITY_LABELS, SPACE_UPPER_LIMIT, DEFAULT_MAX_PRICE } from "@/types";
 import type { ListingWithHost, Amenity, SortOption } from "@/types";
 import {
-  Search, SlidersHorizontal, MapPin, Calendar, Box, X,
-  Heart, MessageSquare, ArrowUpDown, ThumbsUp, Map, List
+  Search, SlidersHorizontal, MapPin, Box,
+  Heart, MessageSquare, ArrowUpDown, ThumbsUp, Map, List,
+  Mail, Phone,
 } from "lucide-react";
 
 export default function SearchPage() {
@@ -30,21 +29,6 @@ export default function SearchPage() {
   const [selectedListing, setSelectedListing] = useState<(ListingWithHost & { _distance?: number }) | null>(null);
   const [shortlistedIds, setShortlistedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
-
-  // Reservation dialog state
-  const [reserveDialog, setReserveDialog] = useState<(ListingWithHost & { _distance?: number }) | null>(null);
-  const [reserveForm, setReserveForm] = useState({
-    spaceRequested: 1,
-    startDate: "",
-    endDate: "",
-    message: "",
-    items: {} as Record<string, string>,
-  });
-  const [reserving, setReserving] = useState(false);
-
-  // Availability state
-  const [availability, setAvailability] = useState<{ date: string; available: number }[] | null>(null);
-  const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   // Local filter state
   const [localFilter, setLocalFilter] = useState({
@@ -165,69 +149,6 @@ export default function SearchPage() {
     }
   }
 
-  function openReserveDialog(listing: ListingWithHost & { _distance?: number }) {
-    setSelectedListing(null);
-    setReserveForm({
-      spaceRequested: 1,
-      startDate: store.startDate,
-      endDate: store.endDate,
-      message: "",
-      items: {},
-    });
-    setAvailability(null);
-    setReserveDialog(listing);
-    // Fetch availability if dates set
-    if (store.startDate && store.endDate) {
-      fetchAvailability(listing.id, store.startDate, store.endDate);
-    }
-  }
-
-  async function fetchAvailability(listingId: string, startDate: string, endDate: string) {
-    setLoadingAvailability(true);
-    try {
-      const res = await fetch(
-        `/api/listings/${listingId}/availability?startDate=${startDate}&endDate=${endDate}`
-      );
-      const data = await res.json();
-      if (Array.isArray(data)) setAvailability(data);
-    } catch {}
-    setLoadingAvailability(false);
-  }
-
-  async function submitReservation() {
-    if (!reserveDialog) return;
-    if (!reserveForm.startDate || !reserveForm.endDate) {
-      toast("Please select dates", "error");
-      return;
-    }
-    setReserving(true);
-    try {
-      const res = await fetch("/api/reservations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          listingId: reserveDialog.id,
-          spaceRequested: reserveForm.spaceRequested,
-          startDate: reserveForm.startDate,
-          endDate: reserveForm.endDate,
-          message: reserveForm.message || undefined,
-          items: Object.keys(reserveForm.items).length > 0 ? reserveForm.items : undefined,
-        }),
-      });
-
-      if (res.ok) {
-        toast("Reservation request sent!", "success");
-        setReserveDialog(null);
-      } else {
-        const data = await res.json();
-        toast(data.error || "Failed to create reservation", "error");
-      }
-    } catch {
-      toast("An error occurred", "error");
-    }
-    setReserving(false);
-  }
-
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: "CLOSEST", label: "Closest" },
     { value: "NEWEST", label: "Newest" },
@@ -238,10 +159,6 @@ export default function SearchPage() {
     { value: "SMALLEST", label: "Smallest" },
     { value: "MOST_LIKED", label: "Most Liked" },
   ];
-
-  const minAvailable = availability
-    ? Math.min(...availability.map((a) => a.available))
-    : null;
 
   return (
     <div>
@@ -483,23 +400,30 @@ export default function SearchPage() {
               className="h-40"
             />
 
-            {/* Availability display */}
-            {minAvailable !== null && selectedListing.id === reserveDialog?.id && (
-              <div className="bg-blue-50 rounded-lg p-3 text-sm">
-                <p className="font-medium text-blue-800">
-                  Min. available space in selected dates: {minAvailable} m³
-                </p>
-              </div>
-            )}
-
             <p className="text-sm text-gray-400">
               Host: {selectedListing.host.firstName} {selectedListing.host.lastName}
             </p>
+
+            {/* Host contact info */}
+            {(selectedListing.host.showEmail || selectedListing.host.showPhone) && (
+              <div className="space-y-1">
+                {selectedListing.host.showEmail && selectedListing.host.email && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Mail className="h-4 w-4 text-gray-400" />
+                    <a href={`mailto:${selectedListing.host.email}`} className="hover:text-blue-600">{selectedListing.host.email}</a>
+                  </div>
+                )}
+                {selectedListing.host.showPhone && selectedListing.host.phone && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <a href={`tel:${selectedListing.host.phone}`} className="hover:text-blue-600">{selectedListing.host.phone}</a>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => openReserveDialog(selectedListing)}>
-                <Calendar className="h-4 w-4 mr-1" /> Reserve
-              </Button>
-              <Button variant="outline" onClick={() => createChat(selectedListing)}>
+              <Button className="flex-1" onClick={() => createChat(selectedListing)}>
                 <MessageSquare className="h-4 w-4 mr-1" /> Chat
               </Button>
               <Button
@@ -511,110 +435,6 @@ export default function SearchPage() {
             </div>
           </div>
         )}
-      </Dialog>
-
-      {/* Reservation Dialog */}
-      <Dialog
-        open={!!reserveDialog}
-        onClose={() => setReserveDialog(null)}
-        title={`Reserve: ${reserveDialog?.title || ""}`}
-        className="max-w-lg"
-      >
-        {reserveDialog && (() => {
-          const today = new Date().toISOString().split("T")[0];
-          return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Start Date"
-                type="date"
-                min={today}
-                value={reserveForm.startDate}
-                onChange={(e) => {
-                  setReserveForm({ ...reserveForm, startDate: e.target.value });
-                  if (e.target.value && reserveForm.endDate) {
-                    fetchAvailability(reserveDialog.id, e.target.value, reserveForm.endDate);
-                  }
-                }}
-                required
-              />
-              <Input
-                label="End Date"
-                type="date"
-                min={reserveForm.startDate || today}
-                value={reserveForm.endDate}
-                onChange={(e) => {
-                  setReserveForm({ ...reserveForm, endDate: e.target.value });
-                  if (reserveForm.startDate && e.target.value) {
-                    fetchAvailability(reserveDialog.id, reserveForm.startDate, e.target.value);
-                  }
-                }}
-                required
-              />
-            </div>
-
-            {/* Availability */}
-            {loadingAvailability && (
-              <p className="text-xs text-gray-500">Checking availability...</p>
-            )}
-            {minAvailable !== null && (
-              <div className="bg-blue-50 rounded-lg p-3 text-sm">
-                <p className="text-blue-800">
-                  Min. available space in date range: <strong>{minAvailable} m³</strong>
-                </p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Space: {reserveForm.spaceRequested} m³
-              </label>
-              <input
-                type="range"
-                min={SPACE_BOOKING_LOWER_LIMIT || 0.5}
-                max={minAvailable !== null ? minAvailable : reserveDialog.spaceAvailable}
-                step="0.5"
-                value={reserveForm.spaceRequested}
-                onChange={(e) => setReserveForm({ ...reserveForm, spaceRequested: parseFloat(e.target.value) })}
-                className="w-full"
-              />
-            </div>
-
-            <Textarea
-              label="Message (optional)"
-              value={reserveForm.message}
-              onChange={(e) => setReserveForm({ ...reserveForm, message: e.target.value })}
-              placeholder="Any special requirements..."
-            />
-
-            <ItemDeclaration
-              value={reserveForm.items}
-              onChange={(items) => setReserveForm({ ...reserveForm, items })}
-            />
-
-            {reserveForm.startDate && reserveForm.endDate && (
-              <div className="bg-gray-50 rounded-lg p-3 text-sm">
-                <p className="font-medium">
-                  Estimated cost: $
-                  {(
-                    reserveDialog.price *
-                    reserveForm.spaceRequested *
-                    Math.ceil(
-                      (new Date(reserveForm.endDate).getTime() - new Date(reserveForm.startDate).getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    )
-                  ).toFixed(2)}{" "}
-                  CAD
-                </p>
-              </div>
-            )}
-
-            <Button className="w-full" onClick={submitReservation} disabled={reserving}>
-              {reserving ? "Submitting..." : "Submit Reservation Request"}
-            </Button>
-          </div>
-        );
-        })()}
       </Dialog>
     </div>
   );

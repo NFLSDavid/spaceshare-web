@@ -6,8 +6,16 @@ const WITH_HOST = {
   host: { select: USER_PUBLIC_SELECT },
 } as const;
 
+const HOST_WITH_CONTACT_SELECT = {
+  ...USER_PUBLIC_SELECT,
+  email: true,
+  phone: true,
+  showEmail: true,
+  showPhone: true,
+} as const;
+
 const WITH_HOST_AND_BOOKINGS = {
-  host: { select: USER_PUBLIC_SELECT },
+  host: { select: HOST_WITH_CONTACT_SELECT },
   bookings: true,
 } as const;
 
@@ -28,6 +36,14 @@ export const listingRepository = {
       where: { hostId, deletedAt: null },
       include: WITH_HOST_AND_BOOKINGS,
       orderBy: { createdAt: "desc" },
+    });
+  },
+
+  findDeletedByHost(hostId: string) {
+    return prisma.listing.findMany({
+      where: { hostId, deletedAt: { not: null } },
+      include: WITH_HOST_AND_BOOKINGS,
+      orderBy: { deletedAt: "desc" },
     });
   },
 

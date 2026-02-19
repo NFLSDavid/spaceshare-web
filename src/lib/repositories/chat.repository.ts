@@ -23,6 +23,8 @@ const CHAT_DETAIL_INCLUDE = {
       longitude: true,
       isActive: true,
       deletedAt: true,
+      spaceAvailable: true,
+      hostId: true,
     },
   },
 } as const;

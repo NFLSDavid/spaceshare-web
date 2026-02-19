@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma";
 
 export const messageRepository = {
   create(data: {
@@ -7,6 +8,7 @@ export const messageRepository = {
     senderName: string;
     text?: string;
     imageUrl?: string;
+    proposalData?: Prisma.InputJsonValue;
   }) {
     return prisma.message.create({ data });
   },
@@ -16,6 +18,14 @@ export const messageRepository = {
       where: { id },
       select: { createdAt: true },
     });
+  },
+
+  findByIdFull(id: string) {
+    return prisma.message.findUnique({ where: { id } });
+  },
+
+  update(id: string, data: Prisma.MessageUncheckedUpdateInput) {
+    return prisma.message.update({ where: { id }, data });
   },
 
   findNewMessages(chatId: string, afterDate?: Date) {

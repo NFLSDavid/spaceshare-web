@@ -21,6 +21,7 @@ enum ReservationStatus {
   DECLINED
   CANCELLED
   COMPLETED
+  CANCEL_REQUESTED
 }
 
 model User {
@@ -35,6 +36,9 @@ model User {
   isVerified     Int       @default(0)
   emailVerified  Boolean   @default(false)
   isAdmin        Boolean   @default(false)
+  blockedUserIds    String[] @default([])
+  showEmail         Boolean  @default(false)
+  showPhone         Boolean  @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -93,8 +97,9 @@ model Reservation {
   listingId        String
   hostId           String
   clientId         String
-  spaceRequested   Float
-  totalCost        Float
+  spaceRequested    Float
+  totalCost         Float
+  cancelRequestedBy String?
   startDate        DateTime
   endDate          DateTime
   status           ReservationStatus @default(PENDING)
@@ -102,6 +107,8 @@ model Reservation {
   items            Json?
   rated            Boolean           @default(false)
   paymentCompleted Boolean           @default(false)
+  clearedByHost    Boolean           @default(false)
+  clearedByClient  Boolean           @default(false)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -142,8 +149,9 @@ model Message {
   chatId     String
   senderId   String
   senderName String
-  text       String?  @db.Text
-  imageUrl   String?
+  text         String?  @db.Text
+  imageUrl     String?
+  proposalData Json?
   createdAt  DateTime @default(now())
 
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)

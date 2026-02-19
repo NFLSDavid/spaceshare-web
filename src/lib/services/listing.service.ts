@@ -6,6 +6,7 @@ import type { SortOption } from "@/types";
 import {
   listingRepository,
   reservationRepository,
+  userRepository,
 } from "@/lib/repositories";
 import "@/lib/events/observers"; // register all observers (idempotent via ESM cache)
 import { eventBus } from "@/lib/events/bus";
@@ -116,6 +117,13 @@ export const listingService = {
     // Client mode: search listings
     let listings: ListingWithDistance[] = await listingRepository.findActive(userId);
 
+    // Filter out listings from blocked hosts (blocked after decline)
+    const blockedUserIds = await userRepository.getBlockedUserIds(userId);
+    if (blockedUserIds.length > 0) {
+      const blockedSet = new Set(blockedUserIds);
+      listings = listings.filter((l) => !blockedSet.has(l.hostId));
+    }
+
     // Filter by distance
     if (filters.lat && filters.lng && filters.radius) {
       listings = listings.filter((listing) => {
@@ -153,6 +161,10 @@ export const listingService = {
 
     // Apply sorting (default to NEWEST)
     return sortListings(listings, filters.sortBy ?? "NEWEST");
+  },
+
+  async getDeletedListings(hostId: string) {
+    return listingRepository.findDeletedByHost(hostId);
   },
 
   async create(

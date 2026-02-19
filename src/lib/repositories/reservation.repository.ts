@@ -31,17 +31,17 @@ export const reservationRepository = {
     });
   },
 
-  findByHost(hostId: string) {
+  findByHost(hostId: string, cleared: boolean = false) {
     return prisma.reservation.findMany({
-      where: { hostId },
+      where: { hostId, clearedByHost: cleared },
       include: RESERVATION_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
   },
 
-  findByClient(clientId: string) {
+  findByClient(clientId: string, cleared: boolean = false) {
     return prisma.reservation.findMany({
-      where: { clientId },
+      where: { clientId, clearedByClient: cleared },
       include: RESERVATION_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
@@ -109,6 +109,51 @@ export const reservationRepository = {
    * 1. Delete matching booking
    * 2. Update reservation status to CANCELLED
    */
+  /**
+   * Create a reservation as APPROVED + create booking in a single transaction.
+   * Used when a host accepts a chat proposal.
+   */
+  async createApprovedWithBooking(
+    reservationData: {
+      listingId: string;
+      hostId: string;
+      clientId: string;
+      spaceRequested: number;
+      totalCost: number;
+      startDate: Date;
+      endDate: Date;
+      message?: string;
+      items?: Prisma.InputJsonValue;
+    },
+    validateAvailability: (
+      bookings: { startDate: Date; endDate: Date; reservedSpace: number }[],
+    ) => void,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const currentBookings = await tx.booking.findMany({
+        where: { listingId: reservationData.listingId },
+      });
+      validateAvailability(currentBookings);
+
+      await tx.booking.create({
+        data: {
+          listingId: reservationData.listingId,
+          startDate: reservationData.startDate,
+          endDate: reservationData.endDate,
+          reservedSpace: reservationData.spaceRequested,
+        },
+      });
+
+      return tx.reservation.create({
+        data: {
+          ...reservationData,
+          status: "APPROVED",
+        },
+        include: RESERVATION_INCLUDE,
+      });
+    });
+  },
+
   async cancelWithBookingCleanup(
     reservationId: string,
     bookingCriteria: {

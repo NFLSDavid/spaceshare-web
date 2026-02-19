@@ -37,6 +37,7 @@ export const createReservationSchema = z
 export const updateReservationSchema = z.object({
   status: z.nativeEnum(ReservationStatus).optional(),
   rated: z.boolean().optional(),
+  cleared: z.boolean().optional(),
 });
 
 // ---- Chat / Messages ----
@@ -55,6 +56,28 @@ export const sendMessageSchema = z
   .refine((data) => data.text || data.imageUrl, {
     message: "Either text or imageUrl is required",
   });
+
+export const sendProposalSchema = z
+  .object({
+    totalCost: z.coerce.number().positive("Total cost must be positive"),
+    spaceRequested: z.number().positive("Space must be positive"),
+    startDate: z.string().min(1, "Start date is required"),
+    endDate: z.string().min(1, "End date is required"),
+    items: z.record(z.string(), z.unknown()).optional(),
+    message: z.string().optional(),
+  })
+  .refine((data) => new Date(data.endDate) > new Date(data.startDate), {
+    message: "End date must be after start date",
+    path: ["endDate"],
+  });
+
+export const respondProposalSchema = z.object({
+  action: z.enum(["accept", "reject"]),
+});
+
+export const blockUserSchema = z.object({
+  targetUserId: z.string().min(1, "Target user ID required"),
+});
 
 // ---- Preferences ----
 export const updatePreferencesSchema = z.object({

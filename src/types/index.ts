@@ -25,8 +25,19 @@ export type {
 };
 
 export type ListingWithHost = Listing & {
-  host: Pick<User, "id" | "firstName" | "lastName" | "photoUrl">;
+  host: Pick<User, "id" | "firstName" | "lastName" | "photoUrl" | "email" | "phone" | "showEmail" | "showPhone">;
 };
+
+export interface ProposalData {
+  listingId: string;
+  totalCost: number;
+  spaceRequested: number;
+  startDate: string;
+  endDate: string;
+  items?: Record<string, unknown>;
+  message?: string;
+  status: "pending" | "accepted" | "rejected";
+}
 
 export type ListingWithBookings = Listing & {
   bookings: Booking[];

@@ -23,6 +23,8 @@ interface UserProfile {
   photoUrl: string | null;
   isVerified: number;
   governmentId: string | null;
+  showEmail: boolean;
+  showPhone: boolean;
 }
 
 export default function ProfilePage() {
@@ -180,6 +182,54 @@ export default function ProfilePage() {
             <Phone className="h-4 w-4 text-gray-400" />
             <span>{profile?.phone || "Not set"}</span>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Contact Visibility */}
+      <Card>
+        <CardHeader><h3 className="font-semibold">Contact Visibility</h3></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-gray-500">Choose what contact info is visible on your listings.</p>
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm">Show email on listings</span>
+            <input
+              type="checkbox"
+              checked={profile?.showEmail ?? false}
+              onChange={async (e) => {
+                const showEmail = e.target.checked;
+                try {
+                  await fetch("/api/users", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ showEmail }),
+                  });
+                  setProfile((p) => p ? { ...p, showEmail } : p);
+                  toast(`Email ${showEmail ? "visible" : "hidden"} on listings`, "success");
+                } catch { toast("Failed to update", "error"); }
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+          </label>
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm">Show phone on listings</span>
+            <input
+              type="checkbox"
+              checked={profile?.showPhone ?? false}
+              onChange={async (e) => {
+                const showPhone = e.target.checked;
+                try {
+                  await fetch("/api/users", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ showPhone }),
+                  });
+                  setProfile((p) => p ? { ...p, showPhone } : p);
+                  toast(`Phone ${showPhone ? "visible" : "hidden"} on listings`, "success");
+                } catch { toast("Failed to update", "error"); }
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+          </label>
         </CardContent>
       </Card>
 

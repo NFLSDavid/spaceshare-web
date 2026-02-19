@@ -11,6 +11,8 @@ const PROFILE_SELECT = {
   photoUrl: true,
   isVerified: true,
   governmentId: true,
+  showEmail: true,
+  showPhone: true,
   createdAt: true,
 } as const;
 
@@ -59,5 +61,22 @@ export const userRepository = {
 
   findByIdSelect(id: string, select: Prisma.UserSelect) {
     return prisma.user.findUnique({ where: { id }, select });
+  },
+
+  async getBlockedUserIds(userId: string): Promise<string[]> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { blockedUserIds: true },
+    });
+    return user?.blockedUserIds ?? [];
+  },
+
+  async addBlockedUser(userId: string, targetUserId: string) {
+    const current = await this.getBlockedUserIds(userId);
+    if (current.includes(targetUserId)) return;
+    return prisma.user.update({
+      where: { id: userId },
+      data: { blockedUserIds: [...current, targetUserId] },
+    });
   },
 };

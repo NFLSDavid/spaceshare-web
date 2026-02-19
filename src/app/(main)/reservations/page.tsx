@@ -9,7 +9,8 @@ import { toast } from "@/components/ui/toast";
 import { ItemDeclaration } from "@/components/item-declaration";
 import type { ReservationWithDetails, ReservationStatus } from "@/types";
 import { format } from "date-fns";
-import { Calendar, DollarSign, Box, User, CheckCircle, XCircle, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Calendar, DollarSign, Box, User, CheckCircle, XCircle, ThumbsUp, ThumbsDown, Archive, MessageSquare } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const STATUS_BADGE: Record<string, "default" | "success" | "warning" | "error" | "info"> = {
   PENDING: "warning",
@@ -17,10 +18,12 @@ const STATUS_BADGE: Record<string, "default" | "success" | "warning" | "error" |
   DECLINED: "error",
   CANCELLED: "error",
   COMPLETED: "success",
+  CANCEL_REQUESTED: "warning",
 };
 
 export default function ReservationsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [asHost, setAsHost] = useState(false);
   const [reservations, setReservations] = useState<ReservationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,7 @@ export default function ReservationsPage() {
         body: JSON.stringify({ status }),
       });
       if (res.ok) {
-        toast(`Reservation ${status.toLowerCase()}`, "success");
+        toast(`Reservation ${status.toLowerCase().replace("_", " ")}`, "success");
         setSelected(null);
         fetchReservations();
       } else {
@@ -83,8 +86,28 @@ export default function ReservationsPage() {
     }
   }
 
+  async function clearReservation(id: string) {
+    try {
+      const res = await fetch(`/api/reservations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cleared: true }),
+      });
+      if (res.ok) {
+        toast("Moved to history", "success");
+        setSelected(null);
+        fetchReservations();
+      } else {
+        const data = await res.json();
+        toast(data.error || "Failed to clear", "error");
+      }
+    } catch {
+      toast("An error occurred", "error");
+    }
+  }
+
   const filtered = filter === "ALL" ? reservations : reservations.filter((r) => r.status === filter);
-  const filters = ["ALL", "PENDING", "APPROVED", "DECLINED", "CANCELLED", "COMPLETED"];
+  const filters = ["ALL", "PENDING", "APPROVED", "CANCEL_REQUESTED", "DECLINED", "CANCELLED", "COMPLETED"];
 
   return (
     <div>
@@ -125,7 +148,7 @@ export default function ReservationsPage() {
                 : "border-gray-200 text-gray-600"
             }`}
           >
-            {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
+            {f === "ALL" ? "All" : f.replace("_", " ").charAt(0) + f.replace("_", " ").slice(1).toLowerCase()}
             {f !== "ALL" && (
               <span className="ml-1 text-[10px]">
                 ({reservations.filter((r) => r.status === f).length})
@@ -150,7 +173,7 @@ export default function ReservationsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className={`font-medium text-sm truncate ${(r.listing.deletedAt || !r.listing.isActive) ? "line-through text-gray-400" : ""}`}>{r.listing.title}</h3>
-                    <Badge variant={STATUS_BADGE[r.status]}>{r.status}</Badge>
+                    <Badge variant={STATUS_BADGE[r.status]}>{r.status.replace("_", " ")}</Badge>
                   </div>
                   {(r.listing.deletedAt || !r.listing.isActive) && (
                     <p className="text-xs text-red-500 font-medium">Listing no longer available</p>
@@ -189,14 +212,14 @@ export default function ReservationsPage() {
               )}
               <div>
                 <h3 className="font-semibold">{selected.listing.title}</h3>
-                <Badge variant={STATUS_BADGE[selected.status]}>{selected.status}</Badge>
+                <Badge variant={STATUS_BADGE[selected.status]}>{selected.status.replace("_", " ")}</Badge>
               </div>
             </div>
 
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-gray-400" />{format(new Date(selected.startDate), "MMM d, yyyy")} - {format(new Date(selected.endDate), "MMM d, yyyy")}</div>
               <div className="flex items-center gap-2"><Box className="h-4 w-4 text-gray-400" />{selected.spaceRequested} m³ requested</div>
-              <div className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-gray-400" />${selected.totalCost.toFixed(2)} CAD total</div>
+              <div className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-gray-400" />Total: ${selected.totalCost.toFixed(2)} CAD</div>
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-gray-400" />
                 {asHost
@@ -241,7 +264,19 @@ export default function ReservationsPage() {
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
+            {/* CANCEL_REQUESTED info */}
+            {selected.status === "CANCEL_REQUESTED" && (
+              <div className="bg-amber-50 rounded-lg p-3 text-sm text-amber-800">
+                <p className="font-medium">Cancellation requested</p>
+                <p className="text-xs mt-1">
+                  {selected.cancelRequestedBy === user?.id
+                    ? "You requested cancellation. Waiting for the other party to approve."
+                    : "The other party requested cancellation. You can approve or reject."}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2 flex-wrap">
               {/* Host actions */}
               {asHost && selected.status === "PENDING" && (
                 <>
@@ -254,15 +289,51 @@ export default function ReservationsPage() {
                 </>
               )}
               {asHost && selected.status === "APPROVED" && (
-                <Button className="flex-1" onClick={() => updateStatus(selected.id, "COMPLETED")}>
-                  <CheckCircle className="h-4 w-4 mr-1" /> Mark Completed
-                </Button>
+                <>
+                  <Button className="flex-1" onClick={() => updateStatus(selected.id, "COMPLETED")}>
+                    <CheckCircle className="h-4 w-4 mr-1" /> Mark Completed
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => updateStatus(selected.id, "CANCEL_REQUESTED")}>
+                    <XCircle className="h-4 w-4 mr-1" /> Request Cancel
+                  </Button>
+                </>
               )}
 
               {/* Client actions */}
-              {!asHost && (selected.status === "PENDING" || selected.status === "APPROVED") && (
+              {!asHost && selected.status === "PENDING" && (
                 <Button variant="destructive" className="flex-1" onClick={() => updateStatus(selected.id, "CANCELLED")}>
                   <XCircle className="h-4 w-4 mr-1" /> Cancel
+                </Button>
+              )}
+              {!asHost && selected.status === "APPROVED" && (
+                <Button variant="outline" className="flex-1" onClick={() => updateStatus(selected.id, "CANCEL_REQUESTED")}>
+                  <XCircle className="h-4 w-4 mr-1" /> Request Cancel
+                </Button>
+              )}
+
+              {/* CANCEL_REQUESTED actions (for the other party) */}
+              {selected.status === "CANCEL_REQUESTED" && selected.cancelRequestedBy !== user?.id && (
+                <>
+                  <Button variant="destructive" className="flex-1" onClick={() => updateStatus(selected.id, "CANCELLED")}>
+                    <CheckCircle className="h-4 w-4 mr-1" /> Approve Cancel
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => updateStatus(selected.id, "APPROVED")}>
+                    <XCircle className="h-4 w-4 mr-1" /> Reject Cancel
+                  </Button>
+                </>
+              )}
+
+              {/* Chat button for active reservations */}
+              {(selected.status === "APPROVED" || selected.status === "CANCEL_REQUESTED") && (
+                <Button variant="outline" className="flex-1" onClick={() => router.push("/messages")}>
+                  <MessageSquare className="h-4 w-4 mr-1" /> Chat
+                </Button>
+              )}
+
+              {/* Clear to history (terminal states only) */}
+              {(selected.status === "CANCELLED" || selected.status === "DECLINED" || selected.status === "COMPLETED") && (
+                <Button variant="outline" className="flex-1" onClick={() => clearReservation(selected.id)}>
+                  <Archive className="h-4 w-4 mr-1" /> Clear
                 </Button>
               )}
             </div>

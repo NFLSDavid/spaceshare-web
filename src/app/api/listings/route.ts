@@ -7,6 +7,11 @@ import type { SortOption } from "@/types";
 export const GET = withAuth(async (req: NextRequest, session) => {
   const { searchParams } = new URL(req.url);
 
+  if (searchParams.get("deleted") === "true") {
+    const deleted = await listingService.getDeletedListings(session.user.id);
+    return NextResponse.json(deleted);
+  }
+
   const listings = await listingService.search(session.user.id, {
     hostId: searchParams.get("hostId") || undefined,
     lat: searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : undefined,

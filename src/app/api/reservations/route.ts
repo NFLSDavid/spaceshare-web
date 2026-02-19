@@ -6,10 +6,12 @@ import { reservationService } from "@/lib/services";
 export const GET = withAuth(async (req: NextRequest, session) => {
   const { searchParams } = new URL(req.url);
   const asHost = searchParams.get("asHost") === "true";
+  const cleared = searchParams.get("cleared") === "true";
 
   const reservations = await reservationService.getReservations(
     session.user.id,
     asHost,
+    cleared,
   );
 
   return NextResponse.json(reservations);
